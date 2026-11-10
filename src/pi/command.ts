@@ -18,7 +18,7 @@ export function registerBgCommand(
     /** W8's setSessionOverride bound to Services; returns the confirmation or error text. */
     setSession: (k: "timeout" | "notify", v: string) => string;
     /** Last lines of a task's output (the runtime tail, owned by W6). */
-    tailOf?: (id: TaskId) => string[];
+    tailOf?: (id: TaskId) => string[] | Promise<string[]>;
   },
 ): void {
   const { registry } = deps;
@@ -61,7 +61,7 @@ export function registerBgCommand(
           const err = badId(arg);
           if (err !== undefined) return say(err, "error");
           const task = registry.get(arg)!;
-          say(`${bgCommandText("tail", { id: arg })}\n${summaryText([registry.summarize(task)], deps.tailOf?.(arg) ?? [])}`);
+          say(`${bgCommandText("tail", { id: arg })}\n${summaryText([registry.summarize(task)], (await deps.tailOf?.(arg)) ?? [])}`);
           return;
         }
         case "kill": {

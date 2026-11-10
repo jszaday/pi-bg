@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_WRITE_BYTES, registerBgTools } from "../../src/pi/bg-tools.js";
+import { MAX_WRITE_BYTES, commandTail, registerBgTools } from "../../src/pi/bg-tools.js";
 import { evictFinished } from "../../src/pi/runtime.js";
 import { makeHarness, type Harness } from "./w6a-services.js";
 
@@ -460,5 +460,27 @@ describe("evicted runtime entries (#12)", () => {
     await expect(call(h, "bg_status", { id: "bg2" })).resolves.toBeDefined();
     await expect(call(h, "bg_output", { id: "bg2" })).resolves.toBeDefined();
     await expect(call(h, "bg_output", { id: "bg9" })).rejects.toThrow(/No task bg9/);
+  });
+  it("commandTail (/bg tail) shows the log tail of an evicted task, same as before eviction (#26)", async () => {
+    const h = evictedSetup();
+    await h.flush();
+    const t = h.s.registry.get("bg1")!;
+    const before = await commandTail(h.s, t, 2);
+    evictFinished(h.s, 1);
+    expect(h.s.runtime.get("bg1")!.evicted).toBe(true);
+    expect(await commandTail(h.s, t, 2)).toEqual(["two", "three"]);
+    expect(before).toEqual(["two", "three"]);
+  });
+  it("commandTail explains an evicted task whose log is unreadable, and stays silent for a live ring", async () => {
+    const h = evictedSetup();
+    await h.flush();
+    const t = h.s.registry.get("bg1")!;
+    evictFinished(h.s, 1);
+    h.s.logs.read = async () => ({ error: "gone" }) as any;
+    const out = await commandTail(h.s, t, 2);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatch(/log file is missing or unreadable\. Action:/);
+    // negative control: bg2 still holds its ring, so no note
+    expect(await commandTail(h.s, h.s.registry.get("bg2")!, 2)).toEqual(["later"]);
   });
 });

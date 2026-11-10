@@ -76,6 +76,14 @@ async function tailOf(s: Services, t: Task, n: number): Promise<string[]> {
   return lines.slice(-n);
 }
 
+/** Tail lines for `/bg tail`: as `tailOf`, but an evicted task whose log cannot be read gets a one-line explanation instead of silently no lines. */
+export async function commandTail(s: Services, t: Task, n: number): Promise<string[]> {
+  const lines = await tailOf(s, t, n);
+  if (lines.length > 0 || !s.runtime.get(t.id)?.evicted) return lines;
+  const probe = t.logPath === undefined || t.logDegraded ? { error: true } : await s.logs.read(t.id, "combined", 0, 0);
+  return "error" in probe ? [`(output of ${t.id} was released from memory and its log file is missing or unreadable. Action: check output.logDir, or rerun the command.)`] : lines;
+}
+
 async function summarize(s: Services, t: Task, tailLines: number | undefined): Promise<TaskSummary> {
   return s.registry.summarize(t, tailLines && tailLines > 0 ? await tailOf(s, t, tailLines) : undefined);
 }
