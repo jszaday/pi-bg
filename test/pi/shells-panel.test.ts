@@ -263,3 +263,97 @@ describe("shells panel", () => {
     expect(() => t.panel.dispose()).not.toThrow();
   });
 });
+
+describe("shells panel, released output", () => {
+  function released(fetch: (id: string, n: number) => Promise<string[]>) {
+    const s = w7Setup();
+    const releasedTail = vi.fn(fetch);
+    const releasedIds = new Set<string>();
+    const panel = createShellsPanel({
+      registry: s.registry,
+      clock: s.clock,
+      kill: vi.fn(async (id: string) => ok(id)),
+      tailOf: () => [],
+      released: (id) => releasedIds.has(id),
+      releasedTail,
+      setFooterFocus: vi.fn(),
+    });
+    const ctx = w7Ctx(s.pi);
+    const task = s.registry.create(w7Spec({ startInBackground: true }));
+    const lines = () => s.pi.ui.overlays.at(-1)!.component.render(80);
+    return { ...s, panel, ctx, task, releasedTail, releasedIds, lines };
+  }
+  const flush = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  it("shows the log tail in the detail view and its last line in the list, fetching once per task", async () => {
+    const t = released(async () => ["one", "two", "three"]);
+    t.releasedIds.add(t.task.id);
+    t.panel.open(t.ctx);
+    expect(t.lines().join("\n")).toContain("(reading log…)");
+    await flush();
+    t.clock.advance(1000);
+    expect(t.lines().join("\n")).toContain("three");
+    t.pi.ui.typeKey(ENTER);
+    expect(t.lines()).toEqual(expect.arrayContaining(["one", "two", "three"]));
+    t.clock.advance(3000);
+    t.lines();
+    expect(t.releasedTail).toHaveBeenCalledTimes(1);
+    expect(t.releasedTail).toHaveBeenCalledWith(t.task.id, 500);
+  });
+
+  it("shows a pending placeholder, then redraws through the throttle when the read resolves", async () => {
+    let resolve!: (l: string[]) => void;
+    const t = released(() => new Promise<string[]>((r) => (resolve = r)));
+    t.releasedIds.add(t.task.id);
+    t.panel.open(t.ctx);
+    t.pi.ui.typeKey(ENTER);
+    expect(t.lines()).toContain("(reading log…)");
+    const before = t.pi.ui.tui.renders;
+    resolve(["from log"]);
+    await flush();
+    expect(t.pi.ui.tui.renders).toBe(before);
+    t.clock.advance(100);
+    expect(t.pi.ui.tui.renders).toBe(before + 1);
+    expect(t.lines()).toContain("from log");
+  });
+
+  it("ignores a result that arrives after the panel closed", async () => {
+    let resolve!: (l: string[]) => void;
+    const t = released(() => new Promise<string[]>((r) => (resolve = r)));
+    t.releasedIds.add(t.task.id);
+    t.panel.open(t.ctx);
+    t.panel.close();
+    const before = t.pi.ui.tui.renders;
+    resolve(["late"]);
+    await flush();
+    expect(t.clock.pending()).toBe(0);
+    expect(t.pi.ui.tui.renders).toBe(before);
+  });
+
+  it("names the cause and the action when the read rejects, without refetching", async () => {
+    const t = released(async () => {
+      throw new Error("EACCES");
+    });
+    t.releasedIds.add(t.task.id);
+    t.panel.open(t.ctx);
+    await flush();
+    t.pi.ui.typeKey(ENTER);
+    const text = t.lines().join("\n");
+    expect(text).toContain("EACCES");
+    expect(text).toContain("Action:");
+    t.clock.advance(3000);
+    expect(t.releasedTail).toHaveBeenCalledTimes(1);
+  });
+
+  it("never calls the async read for a task whose output is not released (negative control)", async () => {
+    const t = released(async () => ["x"]);
+    t.panel.open(t.ctx);
+    t.pi.ui.typeKey(ENTER);
+    await flush();
+    t.clock.advance(2000);
+    expect(t.releasedTail).not.toHaveBeenCalled();
+    expect(t.lines().join("\n")).not.toContain("(reading log…)");
+  });
+});

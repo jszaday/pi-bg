@@ -14,6 +14,7 @@ const OUTPUT_LINES = 500;
 const REDRAW_MS = 100; // trailing throttle for registry-driven redraws
 const TICK_MS = 1000; // re-arm while open so runtimes tick
 const MIN_BODY = 3;
+const PENDING_LOG = "(reading log…)";
 const CHROME = 3; // detail header (2 lines) + hint
 
 export interface ShellsPanel {
@@ -30,6 +31,10 @@ export interface ShellsPanelDeps {
   clock: Clock;
   kill: (id: TaskId) => Promise<KillResult>;
   tailOf: (id: TaskId, n: number) => string[];
+  /** True once the task's in-memory output ring was released; `tailOf` has nothing for it then. */
+  released?: (id: TaskId) => boolean;
+  /** Async log read for a released task; the panel calls it at most once per task per open panel. */
+  releasedTail?: (id: TaskId, n: number) => Promise<string[]>;
   setFooterFocus: (focused: boolean) => void;
 }
 
@@ -89,9 +94,30 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
               void Promise.resolve().then(() => finish()); // closed before Pi showed it: dismiss at once
               return { render: () => [], invalidate: () => {} };
             }
+            // Released tasks: log tail by id, fetched once (their output no longer changes); a string is the failure line.
+            const releasedLines = new Map<TaskId, string[] | string>();
+            const tailLines = (id: TaskId, n: number): string[] => {
+              const lines = deps.tailOf(id, n);
+              if (lines.length > 0 || !deps.releasedTail || !deps.released?.(id)) return lines;
+              const got = releasedLines.get(id);
+              if (Array.isArray(got)) return got.slice(-n);
+              if (typeof got === "string") return [got];
+              releasedLines.set(id, PENDING_LOG);
+              deps.releasedTail(id, OUTPUT_LINES).then(
+                (l) => settle(id, l),
+                (e: unknown) =>
+                  settle(id, `(could not read the log of ${id}: ${e instanceof Error ? e.message : String(e)}. Action: check output.logDir, or rerun the command.)`),
+              );
+              return [PENDING_LOG];
+            };
+            const settle = (id: TaskId, result: string[] | string): void => {
+              if (closed) return;
+              releasedLines.set(id, result);
+              sync();
+              redrawSoon();
+            };
             const rowsNow = (): TaskSummary[] =>
-              shellRows(deps.registry.list().map((t) => deps.registry.summarize(t, deps.tailOf(t.id, 1))));
-            // TODO(#15): released tasks show no output; fall back to the log file read used by the bg tail path
+              shellRows(deps.registry.list().map((t) => deps.registry.summarize(t, tailLines(t.id, 1))));
             let rows = rowsNow();
             let view: ShellsViewState = initialView(rows);
             let redrawTimer: TimerHandle | undefined;
@@ -154,7 +180,7 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
             const selected = (): TaskSummary | undefined => rows.find((r) => r.id === view.selectedId);
             const outputOf = (): string[] => {
               const row = selected();
-              return row ? deps.tailOf(row.id, OUTPUT_LINES) : [];
+              return row ? tailLines(row.id, OUTPUT_LINES) : [];
             };
 
             return {
