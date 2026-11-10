@@ -1,0 +1,23 @@
+# Keeps the commit-SHA pins of the actions in .github/workflows/ci.yml current (each pin carries its version in a trailing comment), and the npm dev dependencies.
+# Grouped so all updates of one ecosystem arrive in one PR: one PR means one CI run.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # The Pi packages are peer dependencies pinned to "*"; their versions are not ours to bump.
+    ignore:
+      - dependency-name: "@earendil-works/*"
+    groups:
+      npm:
+        patterns:
+          - "*"
