@@ -1,4 +1,4 @@
-import { isKeyRelease } from "@earendil-works/pi-tui";
+import { isKeyRelease, matchesKey } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import { installMoveKey } from "../../src/pi/input.js";
 import type { ShellsPanel } from "../../src/pi/shells-panel.js";
@@ -26,6 +26,18 @@ describe("installMoveKey", () => {
     const { pi, move, registry } = setup();
     registry.create(w7Spec());
     expect(pi.ui.typeKey(CTRL_B)).toBe(true);
+    expect(move).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves once on a kitty press and ignores the release of the move key", () => {
+    const { pi, move, registry } = setup();
+    registry.create(w7Spec());
+    const press = "\x1b[98;5u";
+    const release = "\x1b[98;5:3u";
+    expect(isKeyRelease(release)).toBe(true);
+    expect(matchesKey(release, "ctrl+b")).toBe(true);
+    expect(pi.ui.typeKey(press)).toBe(true);
+    expect(pi.ui.typeKey(release)).toBe(false);
     expect(move).toHaveBeenCalledTimes(1);
   });
 
