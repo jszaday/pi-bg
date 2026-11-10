@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { KillCause, NotifyStatus, Task, TaskEvent, TaskSpec } from "../../src/contract.js";
-import { isTerminal, newTask, reduce } from "../../src/core/task.js";
+import { compareForDisplay, isTerminal, newTask, reduce } from "../../src/core/task.js";
 
 const spec = (over: Partial<TaskSpec> = {}): TaskSpec => ({
   command: "sleep 1",
@@ -42,6 +42,17 @@ function randomEvent(rnd: () => number, at: number): TaskEvent {
 }
 
 const exit = (at = 10, code: number | null = 0, signal: string | null = null): TaskEvent => ({ type: "exit", code, signal, at });
+
+describe("compareForDisplay", () => {
+  const mk = (id: string, at: number, done = false) => {
+    const t = newTask(id, spec(), at);
+    return done ? reduce(t, exit(at + 1)).task : t;
+  };
+  it("puts running before finished, then newest first, then higher id first", () => {
+    const tasks = [mk("bg1", 5, true), mk("bg2", 1), mk("bg3", 9), mk("bg10", 9), mk("bg4", 7, true)];
+    expect([...tasks].sort(compareForDisplay).map((t) => t.id)).toEqual(["bg10", "bg3", "bg2", "bg4", "bg1"]);
+  });
+});
 
 describe("newTask", () => {
   it("starts in the foreground with zeroed counters", () => {
