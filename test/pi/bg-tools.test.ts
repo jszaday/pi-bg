@@ -323,6 +323,30 @@ describe("bg_kill", () => {
     expect(sc(r).killed.sort()).toEqual(["bg1", "bg2"]);
     expect(h.markSaw.mock.calls.map((c) => c[0]).sort()).toEqual(["bg1", "bg2"]);
   });
+  it("sends the chosen signal and the default stays TERM", async () => {
+    const h = setup();
+    h.start("a");
+    h.start("b");
+    expect(sc(await call(h, "bg_kill", { id: "bg1", signal: "HUP" })).killed).toEqual(["bg1"]);
+    expect(sc(await call(h, "bg_kill", { id: "bg2" })).killed).toEqual(["bg2"]);
+    expect(h.runner.kills).toEqual(["hup", "term"]);
+  });
+  it("accepts KILL on the fallback runner but rejects other signals with cause and action", async () => {
+    const h = setup({ caps: { gracefulTerm: false } });
+    h.start("a");
+    await expect(call(h, "bg_kill", { id: "bg1", signal: "INT" })).rejects.toThrow(/cannot send SIGINT.*fallback runner.*Action: call bg_kill with signal KILL/s);
+    await expect(call(h, "bg_kill", { all: true, signal: "TERM" })).rejects.toThrow(/cannot send SIGTERM/);
+    expect(h.runner.kills).toEqual([]);
+    expect(h.s.registry.get("bg1")?.state).toBe("background");
+    expect(sc(await call(h, "bg_kill", { id: "bg1", signal: "KILL" })).killed).toEqual(["bg1"]);
+    expect(h.runner.kills).toEqual(["kill"]);
+  });
+  it("rejects an unknown signal at the schema", async () => {
+    const h = setup();
+    h.start("a");
+    await expect(call(h, "bg_kill", { id: "bg1", signal: "STOP" })).rejects.toThrow(/schema/);
+    expect(h.runner.kills).toEqual([]);
+  });
   it("lists a finished task as already_finished and marks it seen", async () => {
     const h = setup();
     h.start("a", [{ at: 0, exit: exit0 }]);

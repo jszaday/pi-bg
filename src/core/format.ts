@@ -54,6 +54,7 @@ export type FailureCode =
   | "wait_none"
   | "wait_timeout"
   | "kill_args"
+  | "kill_signal_unsupported"
   | "stream_unsupported"
   | "notify_failed"
   | "listener_failed"
@@ -356,6 +357,8 @@ export function failure(code: FailureCode, ctx: Record<string, string | number>)
       return Number(ctx.both) === 1
         ? "Give either id or all to bg_kill, not both. Action: call bg_kill with only id (one task) or only all true (every running task)."
         : "bg_kill needs exactly one of id or all. Action: call bg_kill with id set to a task id such as bg3, or with all true.";
+    case "kill_signal_unsupported":
+      return `bg_kill cannot send SIG${v(ctx, "signal")} because the fallback runner (Pi's native operations) can only abort a task with SIGKILL. Action: call bg_kill with signal KILL or without signal, or restore the own-spawn runner (a startup warning says why it is not in use).`;
     case "stream_unsupported":
       return `Stream ${v(ctx, "stream")} was requested, but this runner only provides combined output, so combined output is returned. Action: omit stream or use combined.`;
     case "notify_failed":
@@ -380,7 +383,7 @@ export function failure(code: FailureCode, ctx: Record<string, string | number>)
       return failure("kill_failed", { ...ctx, error: "the task has no live process handle yet" });
     case "kill_not_exited":
       // graceful = 0: the runner sent SIGKILL at once (no SIGTERM stage), so naming SIGTERM would be wrong
-      return failure("kill_failed", { ...ctx, error: `still running ${v(ctx, "seconds")}s after ${Number(ctx.graceful) === 0 ? "SIGKILL" : "SIGTERM and the runner's SIGKILL escalation"}` });
+      return failure("kill_failed", { ...ctx, error: `still running ${v(ctx, "seconds")}s after ${Number(ctx.graceful) === 0 || ctx.signal === "SIGKILL" ? "SIGKILL" : `${ctx.signal ?? "SIGTERM"} and the runner's SIGKILL escalation`}` });
     case "config_unreadable":
       return `Cannot read the ${v(ctx, "label")} config ${v(ctx, "file")}: ${v(ctx, "error")}. pi-bg ignores this file and uses the default settings. Action: fix the file's permissions or path, then reload Pi.`;
     case "config_bad_json":

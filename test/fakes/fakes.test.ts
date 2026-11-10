@@ -117,6 +117,19 @@ describe("FakeRunner", () => {
     expect(await h.exited).toEqual({ code: null, signal: "SIGKILL" });
   });
 
+  it("any signal ends with its own SIG name when graceful, SIGKILL when not", async () => {
+    const graceful = new FakeRunner();
+    graceful.script([]);
+    const g = graceful.start({ command: "sleep", cwd: "/" }, () => {});
+    g.kill("usr1");
+    expect(await g.exited).toEqual({ code: null, signal: "SIGUSR1" });
+    expect(graceful.kills).toEqual(["usr1"]);
+    const hard = new FakeRunner({ gracefulTerm: false });
+    const h = hard.start({ command: "sleep", cwd: "/" }, () => {});
+    h.kill("int");
+    expect(await h.exited).toEqual({ code: null, signal: "SIGKILL" });
+  });
+
   it("consumes one script per start and reports pid when the capability is on", () => {
     const runner = new FakeRunner();
     runner.script([{ at: 0, chunk: "first", exit: { code: 0, signal: null } }]);

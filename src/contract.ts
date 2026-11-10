@@ -70,10 +70,12 @@ export interface RunSpec { command: string; cwd: string; env?: Record<string, st
 export interface ExitInfo { code: number | null; signal: string | null; }
 export type OutputSink = (chunk: Uint8Array, stream: "stdout" | "stderr" | "combined") => void;
 export interface RunnerCapabilities { pid: boolean; splitStreams: boolean; gracefulTerm: boolean; }
+/** Signals a handle can send, lowercase; the bg_kill wire values are the uppercase forms. */
+export type KillSignal = "int" | "hup" | "term" | "quit" | "usr1" | "usr2" | "kill";
 export interface ProcessHandle {
   pid?: number;
   exited: Promise<ExitInfo>;            // never rejects; spawn failure resolves via startError
-  kill(mode: "term" | "kill"): void;    // idempotent; the RUNNER escalates term -> kill after its termGraceMs; "term" acts as "kill" if !gracefulTerm
+  kill(signal: KillSignal): void;       // idempotent; sends the signal to the group and the RUNNER escalates to "kill" after its termGraceMs (except for "kill" itself); every signal acts as "kill" if !gracefulTerm
 }
 export interface ProcessRunner {
   readonly capabilities: RunnerCapabilities;

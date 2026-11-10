@@ -1,15 +1,15 @@
-import type { KillCause, ProcessHandle, TaskId } from "../contract.js";
+import type { KillCause, KillSignal, ProcessHandle, TaskId } from "../contract.js";
 import { type KillResult, failure } from "../core/format.js";
 import { isTerminal } from "../core/task.js";
 import { killBoundMs, type Services } from "./runtime.js";
 
 /**
- * Shared by bg_kill, /bg kill and shutdown. One `term` per running task; the runner owns the escalation to
+ * Shared by bg_kill, /bg kill and shutdown. One signal (default `term`) per running task; the runner owns the escalation to
  * SIGKILL. The wait for the exit is bounded (killBoundMs of termGraceMs) on the injected clock. The exit handler
  * does not delete `s.runtime` entries: the ring tail serves finished-task tails and degraded logs.
  * TODO(#12) P3 (runtime gc): memory is bounded per task by the ring size but unbounded in task count; evict old finished entries if sessions grow long.
  */
-export async function killTasks(s: Services, which: TaskId[] | "all", cause: KillCause): Promise<KillResult> {
+export async function killTasks(s: Services, which: TaskId[] | "all", cause: KillCause, signal: KillSignal = "term"): Promise<KillResult> {
   const result: KillResult = { killed: [], alreadyFinished: [], failed: [] };
   const ids = which === "all" ? s.registry.running().map((t) => t.id) : [...new Set(which)];
   const known = (): string =>
@@ -41,8 +41,8 @@ export async function killTasks(s: Services, which: TaskId[] | "all", cause: Kil
     }
     s.registry.dispatch(id, { type: "kill_requested", cause, at: s.clock.now() });
     for (const timer of rt.timers.splice(0)) s.clock.clearTimeout(timer);
-    handle.kill("term");
-    pending.push(waitForExit(s, id, handle, result));
+    handle.kill(signal);
+    pending.push(waitForExit(s, id, handle, result, signal));
   }
   await Promise.all(pending);
   return result;
@@ -53,6 +53,7 @@ async function waitForExit(
   id: TaskId,
   handle: ProcessHandle,
   result: KillResult,
+  signal: KillSignal,
 ): Promise<void> {
   const boundMs = killBoundMs(s.config().kill.termGraceMs);
   let timer: unknown;
@@ -72,6 +73,7 @@ async function waitForExit(
       id,
       seconds: Math.round(boundMs / 1000),
       graceful: s.runner().capabilities.gracefulTerm ? 1 : 0,
+      signal: `SIG${signal.toUpperCase()}`,
       ...(pid !== undefined && { pid }),
     }),
   });

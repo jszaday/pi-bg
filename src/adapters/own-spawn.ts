@@ -116,19 +116,19 @@ export function createOwnSpawnRunner(opts: OwnSpawnOptions): ProcessRunner & { r
       return {
         pid,
         exited,
-        kill(mode) {
+        kill(signal) {
           // Never signal a group seen empty (its id could be reused). Stragglers after the leader exited are still ours to kill.
           if (groupGone || (leaderExited && !groupAlive(pid))) { markGone(); return; }
-          if (mode === "kill") {
+          if (signal === "kill") {
             if (killTimer) clearTimeout(killTimer);
             killTimer = undefined;
             signalGroup(pid, "SIGKILL");
             return;
           }
-          if (killTimer) return; // term already requested: idempotent
-          signalGroup(pid, "SIGTERM");
+          if (killTimer) return; // a signal was already sent and escalation is pending: idempotent
+          signalGroup(pid, `SIG${signal.toUpperCase()}` as NodeJS.Signals);
           killTimer = setTimeout(() => {
-            // Escalate even if the leader died on TERM: a grandchild may have ignored it.
+            // Escalate even if the leader died on the signal: a grandchild may have ignored it.
             if (!groupGone && groupAlive(pid)) signalGroup(pid, "SIGKILL");
           }, opts.termGraceMs);
           killTimer.unref();

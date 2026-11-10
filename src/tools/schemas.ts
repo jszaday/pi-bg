@@ -58,6 +58,11 @@ export const BgWaitParams = Type.Object({
 export const BgKillParams = Type.Object({
   id: Type.Optional(Type.String({ description: "Task id to kill. Give id or all, not both." })),
   all: Type.Optional(Type.Boolean({ description: "Kill every running background task. Give id or all, not both." })),
+  signal: Type.Optional(
+    Type.Union([Type.Literal("INT"), Type.Literal("HUP"), Type.Literal("TERM"), Type.Literal("QUIT"), Type.Literal("USR1"), Type.Literal("USR2"), Type.Literal("KILL")], {
+      description: "Signal to send first, for a program that shuts down cleanly only on that one. Default TERM; SIGKILL follows after a grace period unless KILL is given. Only KILL is available when the fallback runner is in use.",
+    }),
+  ),
 });
 
 export type ToolName = "bash" | "bg_status" | "bg_output" | "bg_wait" | "bg_kill";
