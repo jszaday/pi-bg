@@ -12,6 +12,10 @@ const PGDN = "\x1b[6~";
 
 const ok = (id: string): KillResult => ({ killed: [id], alreadyFinished: [], failed: [] });
 
+// Drops the box (top and bottom border, separators, side bars) and the padding, leaving the content lines.
+const unframe = (framed: string[]): string[] =>
+  framed.slice(1, -1).filter((l) => !l.startsWith("├")).map((l) => l.slice(1, -1).trim());
+
 function setup(output: string[] = [], dropped = { n: 0 }) {
   const s = w7Setup();
   const kill = vi.fn(async (id: string): Promise<KillResult> => ok(id));
@@ -23,8 +27,9 @@ function setup(output: string[] = [], dropped = { n: 0 }) {
   const bg = (over: Parameters<typeof w7Spec>[0] = {}) => s.registry.create(w7Spec({ startInBackground: true, ...over }));
   const exit = (id: string) => s.registry.dispatch(id, { type: "exit", code: 0, signal: null, at: s.clock.now() });
   const overlay = () => s.pi.ui.overlays.at(-1)!;
-  const lines = (width = 80) => overlay().component.render(width);
-  return { ...s, panel, ctx, kill, tailOf, setFooterFocus, bg, exit, overlay, lines };
+  const raw = (width = 80) => overlay().component.render(width);
+  const lines = (width = 80) => unframe(raw(width));
+  return { ...s, panel, ctx, kill, tailOf, setFooterFocus, bg, exit, overlay, raw, lines };
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -38,10 +43,22 @@ describe("shells panel", () => {
     expect(t.panel.isOpen()).toBe(true);
     expect(t.overlay().opts).toMatchObject({ overlay: true });
     const lines = t.lines();
-    expect(lines[0]).toBe(`\x1b[7m${lines[0].replace(/\x1b\[\d+m/g, "")}\x1b[27m`);
+    expect(lines[0]).toContain("\x1b[7m");
     expect(lines[0]).toContain("make one");
     expect(lines[1]).not.toContain("\x1b[7m");
     expect(lines.at(-1)).toContain("esc close");
+  });
+
+  it("draws a rounded box of exactly the render width, with a separator under the detail header", () => {
+    const t = setup(["alpha"]);
+    t.bg({ command: "make" });
+    t.panel.open(t.ctx);
+    for (const view of [t.raw(40), (t.pi.ui.typeKey(ENTER), t.raw(40))]) {
+      expect(view[0]).toBe("╭" + "─".repeat(38) + "╮");
+      expect(view.at(-1)).toBe("╰" + "─".repeat(38) + "╯");
+      for (const l of view) expect([...l.replace(/\x1b\[\d+m/g, "")]).toHaveLength(40);
+    }
+    expect(t.raw(40)[3]).toBe("├" + "─".repeat(38) + "┤");
   });
 
   it("shows the empty text and does not open a second overlay when opened twice", () => {
@@ -50,13 +67,14 @@ describe("shells panel", () => {
     t.panel.open(t.ctx);
     expect(t.pi.ui.overlays).toHaveLength(1);
     expect(t.lines()).toEqual(["No background shells."]);
+    expect(t.raw().length).toBe(3);
   });
 
   it("flattens control whitespace and cuts every line to the render width", () => {
     const t = setup();
     t.bg({ command: "echo a\tb\r\nc " + "z".repeat(200) });
     t.panel.open(t.ctx);
-    for (const l of t.lines(30)) {
+    for (const l of t.raw(30)) {
       expect(l).not.toMatch(/[\r\n\t]/);
       expect(l.replace(/\x1b\[\d+m/g, "").length).toBeLessThanOrEqual(30);
     }
@@ -97,12 +115,12 @@ describe("shells panel", () => {
     const out = Array.from({ length: 100 }, (_, i) => `line ${i}`);
     const t = setup(out);
     t.bg();
-    t.pi.ui.tui.terminal.rows = 20; // body height = floor(20 * 0.8) - 3 = 13
+    t.pi.ui.tui.terminal.rows = 20; // body height = floor(20 * 0.8) - 6 = 10
     t.panel.open(t.ctx);
     t.pi.ui.typeKey(ENTER);
     expect(t.lines().at(-2)).toBe("line 99");
     t.pi.ui.typeKey(PGUP);
-    expect(t.lines().at(-2)).toBe("line 86");
+    expect(t.lines().at(-2)).toBe("line 89");
     t.pi.ui.typeKey(PGDN);
     expect(t.lines().at(-2)).toBe("line 99");
     out.push("line 100");
@@ -303,7 +321,7 @@ describe("shells panel, released output", () => {
     });
     const ctx = w7Ctx(s.pi);
     const task = s.registry.create(w7Spec({ startInBackground: true }));
-    const lines = () => s.pi.ui.overlays.at(-1)!.component.render(80);
+    const lines = () => unframe(s.pi.ui.overlays.at(-1)!.component.render(80));
     return { ...s, panel, ctx, task, releasedTail, releasedIds, lines };
   }
   const flush = async () => {

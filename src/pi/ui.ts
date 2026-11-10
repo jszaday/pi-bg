@@ -26,6 +26,7 @@ export function createUi(
     refresh(): void {
       if (!ctx || (ctx.mode !== "tui" && ctx.mode !== "rpc")) return;
       const text = footerText(deps.registry.running().filter((t) => t.state === "background").length);
+      // TODO(#33): not clickable; setStatus text gets no mouse events. Keyboard only (Down, Enter) until Pi supports clickable status entries.
       const status = text === undefined ? undefined : footerLabel(text, focused);
       if (status === shown) return;
       ctx.ui.setStatus(UI_KEY, status);

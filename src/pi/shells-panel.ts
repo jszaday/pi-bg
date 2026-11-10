@@ -1,7 +1,7 @@
 // Shells panel (DESIGN "shells panel", issue #15): a modal overlay over the pure view model in core/shells-view.ts.
 // This file only wires keys, truncation, styling and redraw timing to Pi.
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
+import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { Clock, TaskId, TaskSummary, TimerHandle } from "../contract.js";
 import { killText, type KillResult } from "../core/format.js";
 import type { TaskRegistry } from "../core/registry.js";
@@ -15,7 +15,8 @@ const REDRAW_MS = 100; // trailing throttle for registry-driven redraws
 const TICK_MS = 1000; // re-arm while open so runtimes tick
 const MIN_BODY = 3;
 const PENDING_LOG = "(reading log…)";
-const CHROME = 3; // detail header (2 lines) + hint
+const FRAME = 2; // top and bottom border
+const CHROME = 6; // detail: FRAME + header (2 lines) + separator + hint
 
 export interface ShellsPanel {
   open(ctx: ExtensionContext): void;
@@ -189,22 +190,34 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
 
             return {
               render(width: number): string[] {
-                const w = Math.max(1, width);
-                const cut = (s: string, pad = false): string => truncateToWidth(flat(s), w, "...", pad);
+                // Rounded box: border colour, accent marker, selectedBg row, dim hint.
+                const innerW = Math.max(1, width - 2);
+                const bar = (l: string, r: string): string => theme.fg("border", l + "─".repeat(innerW) + r);
+                const frame = (content: string[]): string[] => [bar("╭", "╮"), ...content, bar("╰", "╯")];
+                const sep = bar("├", "┤");
+                const boxed = (s: string): string =>
+                  theme.fg("border", "│") + s + " ".repeat(Math.max(0, innerW - visibleWidth(s))) + theme.fg("border", "│");
+                const cut = (s: string, room: number): string => truncateToWidth(flat(s), Math.max(1, room), "...");
+                const plain = (s: string): string => boxed(" " + cut(s, innerW - 1));
+                const dim = (s: string): string => boxed(" " + theme.fg("dim", cut(s, innerW - 1)));
                 const row = selected();
                 if (view.mode === "detail" && row) {
-                  return renderDetail(view, row, outputOf(), bodyHeight()).map((l) => cut(l));
+                  const d = renderDetail(view, row, outputOf(), bodyHeight());
+                  return frame([plain(d[0]), plain(d[1]), sep, ...d.slice(2, -1).map(plain), dim(d[d.length - 1])]);
                 }
                 const { lines, selected: sel } = renderList(view, rows);
+                if (rows.length === 0) return frame(lines.map((l) => boxed(" " + theme.fg("muted", cut(l, innerW - 1)))));
                 // Window the rows around the selection so it stays visible; the last line is the hint.
-                const hint = rows.length > 0 ? lines.length - 1 : -1;
-                const body = hint >= 0 ? lines.slice(0, hint) : lines;
-                const room = Math.max(MIN_BODY, maxRows() - (hint >= 0 ? 1 : 0));
+                const hint = lines.length - 1;
+                const body = lines.slice(0, hint);
+                const room = Math.max(MIN_BODY, maxRows() - FRAME - 1);
                 const start = sel === undefined ? 0 : Math.max(0, Math.min(sel - room + 1, body.length - room));
                 const shown = body.slice(start, start + room).map((l, i) =>
-                  start + i === sel ? theme.inverse(cut(l, true)) : cut(l),
+                  start + i === sel
+                    ? boxed(" " + theme.fg("accent", "❯ ") + theme.bg("selectedBg", theme.fg("text", cut(l, innerW - 3))))
+                    : boxed("   " + theme.fg("text", cut(l, innerW - 3))),
                 );
-                return hint >= 0 ? [...shown, cut(lines[hint])] : shown;
+                return frame([...shown, dim(lines[hint])]);
               },
               invalidate(): void {},
               handleInput(data: string): void {
