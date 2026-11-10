@@ -17,7 +17,12 @@ export interface FakeTui {
 }
 
 // Theme stand-in: inverse wraps the text in the same escapes as Pi's chalk.inverse.
-export const fakeTheme = { inverse: (t: string) => `\x1b[7m${t}\x1b[27m` };
+// fg is the identity so text assertions stay readable; bg("selectedBg") reuses the reverse-video marker so a selected row is detectable.
+export const fakeTheme = {
+  inverse: (t: string) => `\x1b[7m${t}\x1b[27m`,
+  fg: (_color: string, t: string) => t,
+  bg: (_color: string, t: string) => `\x1b[7m${t}\x1b[27m`,
+};
 
 export interface FakeOverlay {
   component: FakeComponent;
