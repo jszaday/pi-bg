@@ -49,6 +49,7 @@ export function startTask(s: Services, spec: TaskSpec, opts: StartOptions = {}):
   const id = task.id;
   s.ui.refresh(); // create() notifies no subscriber; the footer status starts from here
   const rt: TaskRuntime = { tail: createTailBuffer(cfg.output.ringBytes), timers: [] };
+  rt.onOutput = (chunk) => s.monitors.onOutput(id, chunk);
   s.runtime.set(id, rt);
 
   const degrade = (error: string): void => {
@@ -67,7 +68,7 @@ export function startTask(s: Services, spec: TaskSpec, opts: StartOptions = {}):
 
   const sink = (chunk: Uint8Array, stream: "stdout" | "stderr" | "combined"): void => {
     rt.tail.push(chunk);
-    s.monitors.onOutput(id, chunk);
+    rt.onOutput?.(chunk);
     if (rt.log) {
       rt.log.write(chunk, stream);
       if (rt.log.degraded !== null) degrade(rt.log.degraded);

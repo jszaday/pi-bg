@@ -110,6 +110,8 @@ export default function piBg(pi: ExtensionAPI): void {
     config: notifyConfig,
     sink: createMonitorSink(pi, (e) => s.ui.notify(failure("notify_failed", { error: (e as Error).message }), "warning")),
   });
+  // Adopted tasks (keepOnReload) still hold the previous instance's output hook; route their output to this instance's monitors.
+  for (const [id, rt] of runtime) rt.onOutput = (chunk) => monitors.onOutput(id, chunk);
   const waits = new WaitCoordinator({
     clock,
     registry,

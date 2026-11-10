@@ -86,6 +86,23 @@ describe("lines", () => {
     expect(s.lines()).toEqual([]);
   });
 
+  it("holds an unterminated line only up to the bound, dropping the rest of it", () => {
+    const s = setup();
+    s.policy.start("bg1", { grep: /^a+Z$/, maxNotifications: 10 });
+    for (let i = 0; i < 4; i++) s.policy.onOutput("bg1", out("a".repeat(50_000))); // 200k characters, no newline
+    s.policy.onOutput("bg1", out("Z")); // arrives with the line already at the bound
+    s.policy.onOutput("bg1", out("\nok\n"));
+    s.clock.advance(MONITOR_BATCH_MS);
+    expect(s.sink.sent).toHaveLength(0); // the tail "Z" was beyond the bound
+    s.policy.stop("bg1");
+    s.policy.start("bg1", { grep: /^a/, maxNotifications: 10 });
+    s.policy.onOutput("bg1", out("a".repeat(50_000)));
+    s.policy.onOutput("bg1", out("a".repeat(50_000)));
+    s.policy.onOutput("bg1", out("\n"));
+    s.clock.advance(MONITOR_BATCH_MS);
+    expect(s.lines()[0][0]).toHaveLength(MONITOR_LINE_MAX_CHARS); // the head is kept (and cut for display)
+  });
+
   it("skips the line that was half printed when the monitor started", () => {
     const s = setup();
     s.policy.start("bg1", { maxNotifications: 10, midLine: true });
