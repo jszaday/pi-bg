@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 - 2026-11-09
 
 - `bash` tool replaces the built-in: runs commands in the background with `run_in_background`, moves a call to the background after `bg_timeout` seconds (default 30, `0` disables), and accepts `notify` and `description` per call.
 - Move a running command to the background with `ctrl+b` (rebindable with `key` in `pi-bg.json`) or with `/bg move`; double-press in tmux.

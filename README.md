@@ -21,10 +21,10 @@ Requirements: Pi (`pi-coding-agent`) 1.4.0, the version it is tested against; No
 
 ## Install
 
-From a local checkout:
+From npm:
 
 ```
-pi install /path/to/pi-bg
+pi install npm:pi-bg
 ```
 
 From git:
@@ -33,7 +33,11 @@ From git:
 pi install git:github.com/jszaday/pi-bg
 ```
 
-After the first npm release, `pi install npm:pi-bg` will also work.
+From a local checkout:
+
+```
+pi install /path/to/pi-bg
+```
 
 Both the commands above write a package entry to `~/.pi/agent/settings.json`. Add `-l` to write it to `.pi/settings.json` instead; Pi reads project declarations only after the project is trusted. To try the extension for one run without installing it, pass `-e /path/to/pi-bg`. The package is loaded through the `pi.extensions` field of `package.json`, which points at `src/index.ts`. See Pi's package documentation for the other source forms.
 
