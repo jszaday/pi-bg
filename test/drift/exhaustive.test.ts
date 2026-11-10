@@ -35,6 +35,7 @@ const FAILURE_CTX = {
   write_finished: { id: "bg1", state: "exited" },
   write_too_large: { bytes: 70000, limit: 65536 },
   write_failed: { id: "bg1", error: "stdin was already closed" },
+  monitor_ended: { id: "bg1", state: "exited" },
   stream_unsupported: { stream: "stderr" },
   notify_failed: { error: "boom" },
   listener_failed: { id: "bg1", error: "oops" },
