@@ -18,6 +18,7 @@ import { registerBgCommand } from "./pi/command.js";
 import { registerFlags, setSessionOverride } from "./pi/config-load.js";
 import { installInputHandler } from "./pi/input-handler.js";
 import { installMoveKey } from "./pi/input.js";
+import { createShellsPanel } from "./pi/shells-panel.js";
 import { killTasks } from "./pi/kill.js";
 import { installLifecycle } from "./pi/lifecycle.js";
 import { createNotificationSink, installNotifyHandlers } from "./pi/notify.js";
@@ -116,6 +117,14 @@ export default function piBg(pi: ExtensionAPI): void {
 
   const ui = createUi(pi, { registry });
 
+  const shells = createShellsPanel({
+    registry,
+    clock,
+    kill: (id) => killTasks(s, [id], "command"),
+    tailOf,
+    setFooterFocus: (f) => ui.setFooterFocus(f),
+  });
+
   const s: Services = {
     clock,
     config: getConfig,
@@ -141,6 +150,7 @@ export default function piBg(pi: ExtensionAPI): void {
     move: () => bash.handoffAllMovable("user"),
     setSession: (k, v) => setSessionOverride(s, k, v),
     tailOf: (id) => commandTail(s, registry.get(id)!, config.output.tailLines),
+    openPanel: (ctx) => shells.open(ctx),
   });
   registerNotificationRenderer(pi);
   installInputHandler(pi, s);
@@ -154,7 +164,7 @@ export default function piBg(pi: ExtensionAPI): void {
     },
     setConfig: (c) => { config = c; runnerCache = undefined; storeCache = undefined; },
     bash: () => bash,
-    installKey: (ctx, k) => installMoveKey(ctx, { registry, ...k }),
+    installKey: (ctx, k) => installMoveKey(ctx, { registry, shells, ...k }),
     ui,
     ownPath: fileURLToPath(import.meta.url),
   });

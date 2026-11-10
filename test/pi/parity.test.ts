@@ -55,7 +55,7 @@ describe("composition root parity", () => {
     const pi = new FakePi();
     piBg(pi.asExtensionAPI());
     await pi.emit("session_start", { type: "session_start", reason: "startup" }, startCtx(pi));
-    expect(pi.ui.listeners).toHaveLength(1);
+    expect(pi.ui.listeners).toHaveLength(2); // the move key and the shells footer focus
     await pi.emit("session_shutdown", { type: "session_shutdown", reason: "quit" }, startCtx(pi));
     expect(pi.ui.listeners).toHaveLength(0);
   });

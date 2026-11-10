@@ -3,6 +3,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { UiSink } from "../contract.js";
 import { footerText } from "../core/format.js";
 import type { TaskRegistry } from "../core/registry.js";
+import { footerLabel } from "../core/shells-view.js";
 
 export const UI_KEY = "pi-bg";
 
@@ -19,14 +20,21 @@ export function createUi(
   let ctx: ExtensionContext | undefined;
   let unsubscribe: (() => void) | undefined;
   let shown: string | undefined;
+  let focused = false;
 
   const ui = {
     refresh(): void {
       if (!ctx || (ctx.mode !== "tui" && ctx.mode !== "rpc")) return;
-      const status = footerText(deps.registry.running().filter((t) => t.state === "background").length);
+      const text = footerText(deps.registry.running().filter((t) => t.state === "background").length);
+      const status = text === undefined ? undefined : footerLabel(text, focused);
       if (status === shown) return;
       ctx.ui.setStatus(UI_KEY, status);
       shown = status;
+    },
+    setFooterFocus(f: boolean): void {
+      if (f === focused) return;
+      focused = f;
+      ui.refresh();
     },
     notify(msg: string, level: "info" | "warning" | "error"): void {
       notifyUser(ctx, msg, level);
@@ -42,6 +50,7 @@ export function createUi(
       unsubscribe = undefined;
       if (ctx && (ctx.mode === "tui" || ctx.mode === "rpc") && shown !== undefined) ctx.ui.setStatus(UI_KEY, undefined);
       shown = undefined;
+      focused = false;
       ctx = undefined;
     },
   };

@@ -45,7 +45,7 @@ export function w8Services(over: { config?: Partial<BgConfig>; sink?: Notificati
     ctx: {},
     waits,
     notify,
-    ui: { refresh() {}, notify: (msg, level) => void uiCalls.push({ msg, level }) },
+    ui: { refresh() {}, setFooterFocus() {}, notify: (msg, level) => void uiCalls.push({ msg, level }) },
     sessionId: () => "sess",
   };
   return { s, clock, registry, sink: fakeSink, notify, waits, uiCalls, logs, config };

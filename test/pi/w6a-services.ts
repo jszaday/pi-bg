@@ -62,7 +62,7 @@ export function makeHarness(o: { caps?: Partial<RunnerCapabilities>; seed?: numb
     ctx,
     waits,
     notify,
-    ui: { refresh() {}, notify: (m) => void ui.msgs.push(m) },
+    ui: { refresh() {}, setFooterFocus() {}, notify: (m) => void ui.msgs.push(m) },
     sessionId: () => "sess",
   };
   const markSaw = vi.spyOn(notify, "markAgentSaw");
