@@ -4,9 +4,9 @@ import type { KillSignal, StreamName, Task, TaskId, TaskSummary } from "../contr
 import { failure } from "../core/format.js";
 import { grepLines, normalizeForDisplay } from "../core/tail.js";
 import { isTerminal } from "../core/task.js";
-import { SCHEMAS, type BgKillArgs, type BgOutputArgs, type BgStatusArgs, type BgWaitArgs } from "../tools/schemas.js";
+import { SCHEMAS, type BgKillArgs, type BgOutputArgs, type BgStatusArgs, type BgWaitArgs, type BgWriteArgs } from "../tools/schemas.js";
 import { killTasks } from "./kill.js";
-import { toKillResult, toOutputResult, toStatusResult, toWaitResult } from "./results.js";
+import { toKillResult, toOutputResult, toStatusResult, toWaitResult, toWriteResult } from "./results.js";
 import type { Services } from "./runtime.js";
 
 const DEFAULT_STATUS_TAIL = 10;
@@ -16,6 +16,8 @@ const WAIT_TAIL = 10;
 const GREP_WINDOW_BYTES = 8 * 1024 * 1024;
 const MIN_TAIL_WINDOW_BYTES = 64 * 1024;
 const NL = 0x0a;
+/** Most bytes one bg_write call may send; keeps a single call from flooding a pipe the program may not be reading. Mirrored in the data description in tools/schemas.ts. */
+export const MAX_WRITE_BYTES = 64 * 1024;
 
 type Result = ReturnType<typeof toStatusResult>;
 
@@ -241,6 +243,20 @@ async function kill(s: Services, p: BgKillArgs, ctx: ExtensionContext): Promise<
   return toKillResult(r);
 }
 
+async function write(s: Services, p: BgWriteArgs, ctx: ExtensionContext): Promise<Result> {
+  guard(s, ctx);
+  const t = lookup(s, p.id);
+  if (isTerminal(t)) fail(s, failure("write_finished", { id: t.id, state: t.state }));
+  const handle = s.runtime.get(t.id)?.handle;
+  if (!handle?.writeStdin) fail(s, failure("write_no_stdin", { id: t.id }));
+  const bytes = new TextEncoder().encode(p.data);
+  if (bytes.byteLength > MAX_WRITE_BYTES) fail(s, failure("write_too_large", { bytes: bytes.byteLength, limit: MAX_WRITE_BYTES }));
+  const eof = p.eof === true;
+  const r = handle.writeStdin(bytes, eof);
+  if (r) fail(s, failure("write_failed", { id: t.id, error: r.error }));
+  return toWriteResult({ id: t.id, bytes: bytes.byteLength, eof });
+}
+
 export function registerBgTools(pi: ExtensionAPI, s: Services): void {
   pi.registerTool({
     name: "bg_status",
@@ -275,5 +291,13 @@ export function registerBgTools(pi: ExtensionAPI, s: Services): void {
     promptSnippet: "bg_kill: stop one background task (id) or all of them (all)",
     parameters: SCHEMAS.bg_kill,
     execute: (_id, params, _signal, _onUpdate, ctx) => kill(s, params, ctx),
+  });
+  pi.registerTool({
+    name: "bg_write",
+    label: "bg_write",
+    description: "Write text to the stdin of a running background task that was started with bash stdin true (for prompts and interactive programs). eof true closes stdin after the write. At most 65536 bytes per call. Tasks started without stdin cannot take input.",
+    promptSnippet: "bg_write: send input to a background task started with stdin true",
+    parameters: SCHEMAS.bg_write,
+    execute: (_id, params, _signal, _onUpdate, ctx) => write(s, params, ctx),
   });
 }

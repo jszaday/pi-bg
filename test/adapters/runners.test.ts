@@ -82,6 +82,27 @@ describe.each(both)("conformance: %s", (_n, make) => {
 });
 
 describe("own-spawn specifics", () => {
+  it("stdin true: writes reach the program and eof ends its read", async () => {
+    const r = await run(own(), { command: "read a; read b; echo got:$a:$b; cat", cwd: tmp(), env: env(), stdin: true }, (h) => {
+      expect(h.writeStdin?.(Buffer.from("one\n"), false)).toBeUndefined();
+      expect(h.writeStdin?.(Buffer.from("two\nrest"), true)).toBeUndefined();
+    });
+    expect(r.combined.toString()).toBe("got:one:two\nrest");
+    expect(r.exit.code).toBe(0);
+  });
+  it("stdin true: a write after eof, or after the program exited, returns an error and does not throw", async () => {
+    const r = await run(own(), { command: "cat >/dev/null", cwd: tmp(), env: env(), stdin: true }, (h) => {
+      h.writeStdin?.(Buffer.from("x"), true);
+      expect(h.writeStdin?.(Buffer.from("y"), false)).toEqual({ error: "stdin was already closed by an earlier write with eof true" });
+    });
+    expect(r.exit.code).toBe(0);
+    expect(r.handle.writeStdin?.(Buffer.from("z"), false)).toMatchObject({ error: expect.stringMatching(/closed its stdin or has exited|already closed/) });
+  });
+  it("stdin absent: the handle has no writeStdin and reads still see EOF", async () => {
+    const r = await run(own(), { command: "read x; echo rc=$?", cwd: tmp(), env: env() });
+    expect(r.handle.writeStdin).toBeUndefined();
+    expect(r.combined.toString()).toBe("rc=1\n");
+  });
   it("reports a pid equal to the group id and the shell's $$", async () => {
     const r = await run(own(), { command: "echo $$", cwd: tmp(), env: env() });
     expect(r.handle.pid).toBe(Number(r.combined.toString().trim()));
@@ -199,5 +220,13 @@ describe("shell resolution", () => {
     const first = e.PATH.split(":")[0];
     expect(first).toMatch(/\/bin$/);
     expect(piShellEnv({ PATH: e.PATH }).PATH).toBe(e.PATH);
+  });
+});
+
+describe("pi-ops specifics", () => {
+  it("stdin true is a startError naming cause and action; nothing is run", () => {
+    const h = piOps().start({ command: "echo should-not-run", cwd: tmp(), env: env(), stdin: true }, () => {});
+    expect(h).toHaveProperty("startError");
+    expect((h as { startError: string }).startError).toMatch(/Stdin is not supported by the fallback runner.*Action: run the command without stdin/);
   });
 });

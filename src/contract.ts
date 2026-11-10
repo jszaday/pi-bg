@@ -15,6 +15,7 @@ export interface TaskSpec {
   bgTimeoutMs: number | null;     // effective bg_timeout, ms; null or 0 = never auto-handoff
   notify: NotifyLevel;
   startInBackground: boolean;     // newTask() then yields state "background", handoffReason "requested"
+  stdin?: boolean;                // true: the program gets a writable stdin (bg_write); absent or false: stdin is closed (reads see EOF)
   toolCallId?: string;
 }
 
@@ -66,7 +67,7 @@ export interface Clock {
 export type TimerHandle = unknown;
 
 // ---- process port ----
-export interface RunSpec { command: string; cwd: string; env?: Record<string, string>; }
+export interface RunSpec { command: string; cwd: string; env?: Record<string, string>; stdin?: boolean; }
 export interface ExitInfo { code: number | null; signal: string | null; }
 export type OutputSink = (chunk: Uint8Array, stream: "stdout" | "stderr" | "combined") => void;
 export interface RunnerCapabilities { pid: boolean; splitStreams: boolean; gracefulTerm: boolean; }
@@ -75,6 +76,8 @@ export type KillSignal = "int" | "hup" | "term" | "quit" | "usr1" | "usr2" | "ki
 export interface ProcessHandle {
   pid?: number;
   exited: Promise<ExitInfo>;            // never rejects; spawn failure resolves via startError
+  /** Present only when the process was started with `RunSpec.stdin`. Writes `data`; `eof` then closes stdin. Returns `{ error }` (the cause) when stdin cannot take the write: already closed, or the program closed it. */
+  writeStdin?(data: Uint8Array, eof: boolean): { error: string } | undefined;
   kill(signal: KillSignal): void;       // idempotent; sends the signal to the group and the RUNNER escalates to "kill" after its termGraceMs (except for "kill" itself); every signal acts as "kill" if !gracefulTerm
 }
 export interface ProcessRunner {

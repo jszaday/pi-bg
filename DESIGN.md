@@ -84,7 +84,7 @@ The pure core (`src/core`) holds all logic worth testing:
 
 Ports (declared in `src/contract.ts`, implemented outside the core): `Clock`, `ProcessRunner`, `LogStore`, `NotificationSink`, `UiSink`. The runner port hides how a process is spawned (section 4).
 
-Pi glue (`src/pi`) is thin and holds no policy: tool registration (`bash`, `bg_status`, `bg_output`, `bg_wait`, `bg_kill`), the move-key listener, the `input` and lifecycle event handlers, the footer status and `/bg` command, the notification message renderer, config file loading, and the composition root that wires ports to adapters. Adapters (`src/adapters`) implement ports against Node (`child_process`, `fs`) or Pi's `BashOperations`. Tool results use snake_case on the wire (as in section 5) and camelCase internally; one mapping module in the glue owns the conversion.
+Pi glue (`src/pi`) is thin and holds no policy: tool registration (`bash`, `bg_status`, `bg_output`, `bg_wait`, `bg_kill`, `bg_write`), the move-key listener, the `input` and lifecycle event handlers, the footer status and `/bg` command, the notification message renderer, config file loading, and the composition root that wires ports to adapters. Adapters (`src/adapters`) implement ports against Node (`child_process`, `fs`) or Pi's `BashOperations`. Tool results use snake_case on the wire (as in section 5) and camelCase internally; one mapping module in the glue owns the conversion.
 
 This follows the repo conduct (testable logic in pure modules, higher-level facilities built from lower-level primitives, one canonical behavior model with platform realizations behind ports). The seam placement mirrors pi-bg-bash's split modules; no surveyed extension ports the process behind an interface, which is what makes the fake runner possible.
 
@@ -102,16 +102,16 @@ Risk and fallback: the native tool rethrows the sentinel unchanged (section 2), 
 
 ### 4.2 Process runner adapters
 
-`ProcessRunner.start(spec, sink)` returns `{pid?, exited: Promise<ExitInfo>, kill(signal)}` and advertises capabilities `{pid, splitStreams, gracefulTerm}`. Two adapters:
+`ProcessRunner.start(spec, sink)` returns `{pid?, exited: Promise<ExitInfo>, writeStdin?(data, eof), kill(signal)}` and advertises capabilities `{pid, splitStreams, gracefulTerm}`. Two adapters:
 
-- Pi-ops adapter: wraps `createLocalBashOperations`. Reuses Pi's shell resolution, environment, detached spawn, process-tree kill and its tracked-pid cleanup on Pi's exit signals. Limits: no pid, merged streams, kill is SIGKILL of the tree with no grace period.
-- Own-spawn adapter: `child_process.spawn` detached into its own process group, stdout and stderr piped separately, SIGTERM with a grace period then SIGKILL to the group. Gives the pid, split streams (R5 wording "stdout/stderr"), graceful stop, and the pid needed by the orphan reaper (section 12). Cost: it duplicates Pi's shell setup (shell path, command prefix, environment).
+- Pi-ops adapter: wraps `createLocalBashOperations`. Reuses Pi's shell resolution, environment, detached spawn, process-tree kill and its tracked-pid cleanup on Pi's exit signals. Limits: no pid, merged streams, no stdin (`RunSpec.stdin` is a start error), kill is SIGKILL of the tree with no grace period.
+- Own-spawn adapter: `child_process.spawn` detached into its own process group, stdout and stderr piped separately, stdin piped only when `RunSpec.stdin` is set (otherwise `ignore`, so a program that reads stdin sees EOF), SIGTERM with a grace period then SIGKILL to the group. Gives the pid, split streams (R5 wording "stdout/stderr"), graceful stop, and the pid needed by the orphan reaper (section 12). Cost: it duplicates Pi's shell setup (shell path, command prefix, environment).
 
 Recommendation: own-spawn as the default, with the Pi-ops adapter as fallback, selected after a conformance run of both runners against the built-in (quoting, env, prefix, cwd, exit and signal codes, 10 MB output, closed stdin, group kill, timeout and abort text, `TMPDIR`; the native runner lacks only pid and split streams) and by the coordinator decision Q2 (former planning notes, git history). The rest of the design is written against the capabilities, not the adapter: `bg_output` accepts a `stream` parameter and answers `combined` always, `stdout`/`stderr` only when the runner can split.
 
 ## 5. Tool surface
 
-Five tools. `bash` is the replaced built-in with three new parameters; four new tools carry the `bg_` prefix. Schemas are TypeBox (provided by Pi). One tool per verb with small schemas is preferred over one multiplexed tool (patty's `jobs`) because each schema is shorter to read and models misuse union parameters less; the cost is five tool entries in the prompt. Alternative rejected: a separate `bg_start` (pringled `bg_run`); `bash` with `run_in_background` already is the start verb and matches Claude Code, and a duplicate start path would need its own clash and guideline handling. Reopen if S7 shows `bash` is routinely owned by another extension (then a standalone start tool is the only way to offer R2). Ownership is detected at `session_start` with `pi.getAllTools()` and the tool's source info, as pringled does (S7).
+Six tools. `bash` is the replaced built-in with five new parameters; five new tools carry the `bg_` prefix. Schemas are TypeBox (provided by Pi). One tool per verb with small schemas is preferred over one multiplexed tool (patty's `jobs`) because each schema is shorter to read and models misuse union parameters less; the cost is six tool entries in the prompt. Alternative rejected: a separate `bg_start` (pringled `bg_run`); `bash` with `run_in_background` already is the start verb and matches Claude Code, and a duplicate start path would need its own clash and guideline handling. Reopen if S7 shows `bash` is routinely owned by another extension (then a standalone start tool is the only way to offer R2). Ownership is detected at `session_start` with `pi.getAllTools()` and the tool's source info, as pringled does (S7).
 
 Ids are `bg<N>` per session, monotonic, never reused; on `session_start` the counter is reseeded above any id seen in earlier tool results on the branch (pringled's scheme) so a resumed transcript's `bg3` cannot collide.
 
@@ -124,6 +124,7 @@ Parameters:
 - `run_in_background?: boolean` start as a background task at once. Default false.
 - `notify?: "off" | "error" | "done"` notification level for this task. Absent means the config default.
 - `description?: string` short label shown in lists; stored as `TaskSpec.label`.
+- `stdin?: boolean` give the command a writable stdin that `bg_write` feeds (stored as `TaskSpec.stdin`). Default false: stdin is `ignore`, so a program that reads it gets EOF. Rejected as a start error with the Pi-ops fallback runner, and, with pi-bg disabled, like the other pi-bg parameters.
 
 If `timeout` is less than or equal to the effective `bg_timeout`, handoff can never happen and the command is simply killed at `timeout`, exactly as the built-in does; the native timeout text applies. The tool description states that `bg_timeout` should be smaller than `timeout`.
 
@@ -156,7 +157,13 @@ Parameters: `id?: string`, `all?: boolean` (exactly one required), `signal?: "IN
 
 Result: `{killed: id[], already_finished: id[], failed: {id, error}[]}`. A killed task enters `killed` and its notification is suppressed (the agent caused it and sees the result here). Kills with cause `bg_kill`, `command` (the `/bg kill` command) or `shutdown` suppress notifications; `turn_abort` (Esc on a foreground task) never reaches the notification policy because the task is not in the background.
 
-### 5.6 Prompt guidance
+### 5.6 `bg_write`
+
+Parameters: `id: string`, `data: string`, `eof?: boolean`. Writes `data` (UTF-8, as given; no newline is added) to the stdin of a running task that was started with `bash` `stdin: true`; `eof: true` then closes stdin so the program reads end of input. One call carries at most 64 KiB (65536 bytes, `MAX_WRITE_BYTES` in `src/pi/bg-tools.ts`), so a single call cannot flood a pipe the program is not reading; larger input takes several calls. `data` may be empty with `eof`.
+
+Result: `{id, written_bytes, eof}`. Errors, each naming cause and action (section 13): the task was started without stdin, the task has ended, the write is over the size limit, or stdin was already closed or the program closed it. A write does not wait for the program to read it. The ring and log record only the program's output, not the input.
+
+### 5.7 Prompt guidance
 
 The `bash` tool's `promptGuidelines` tell the model to background anything that may run long or near its timeout (so the output stays in a log, not the context), to never sleep or poll (a task-end notification wakes it, or it calls `bg_wait`), and to manage tasks by id with `bg_status`, `bg_output`, `bg_kill` and `bg_wait`. The guidance is a string constant in `format` so it can be tuned in one place.
 
@@ -286,7 +293,7 @@ Scope: this is the closest requirement to richardgill (30 s, per-call, backgroun
 
 ## 12. Lifecycle and cleanup
 
-Start: the extension factory registers all five tools (a registration cannot be added conditionally later). `session_start` reseeds ids, runs log GC, checks bash ownership (below), installs the move-key listener and creates the UI. Per call: create task, start runner, wire timers and sinks.
+Start: the extension factory registers all six tools (a registration cannot be added conditionally later). `session_start` reseeds ids, runs log GC, checks bash ownership (below), installs the move-key listener and creates the UI. Per call: create task, start runner, wire timers and sinks.
 
 Exit paths: `session_shutdown` fires for every reason (quit, reload, new, resume, fork); pi-bg kills all running tasks on all of them (locked decision; the cost is that `/reload` kills background work, noted in `/bg` help). The handler is idempotent, cancels timers, ends an active `bg_wait` as `aborted`, signals the process groups, waits up to 5 s (bounded) for exits, closes log files, unsubscribes the input listener and clears the status. A `process.on("exit")` backstop synchronously SIGKILLs any still-registered groups, for exit paths that skip the event.
 
@@ -308,6 +315,7 @@ Every failure message names the cause and the action, reaches the model (tool er
 |---|---|
 | Unknown id | `No task bg9 in this session. Known: bg1, bg2. Use bg_status with no id to list.` |
 | Id from an earlier run | `bg3 was started before this session was resumed or reloaded and was stopped when Pi exited. Start the command again.` |
+| Write to a task without stdin, a finished task, too much data, or a closed stdin | Error result per class: `bg_write` names the cause (not started with stdin, already ended, over the 65536-byte limit, stdin closed) and the action (start again with `stdin` true, read the output with `bg_output`, split the data). |
 | Kill on a finished task | Not an error: listed in `already_finished` with its final state. |
 | Wait with nothing to wait on | `reason: no_tasks`; text says no background task is running. |
 | Wait timed out | `reason: timeout`; lists states; says to call bg_wait again or bg_status. |
@@ -319,7 +327,7 @@ Every failure message names the cause and the action, reaches the model (tool er
 | Invalid config | Warning once per key with the file and key; defaults used. |
 | Unreadable config file or invalid JSON | Warning naming the file and the read or parse error; the whole file is ignored and the defaults are used; action: fix the file and reload. |
 | Log cleanup failure | Warning naming the log directory and the operation; no logs are deleted this session; retried at the next session start. |
-| Bash owned by another extension | Startup warning naming the owner: `bash is registered by <ext>, which took precedence; pi-bg cannot add run_in_background or ctrl+b. Remove the other bash override to use pi-bg.` Because the first registration wins silently, pi-bg's `bash` is then never called; the four `bg_*` tools stay registered and answer `pi-bg is inactive: bash is owned by <ext>; there are no background tasks.` |
+| Bash owned by another extension | Startup warning naming the owner: `bash is registered by <ext>, which took precedence; pi-bg cannot add run_in_background or ctrl+b. Remove the other bash override to use pi-bg.` Because the first registration wins silently, pi-bg's `bash` is then never called; the five `bg_*` tools stay registered and answer `pi-bg is inactive: bash is owned by <ext>; there are no background tasks.` |
 | Unsupported platform | `pi-bg is inactive on Windows in v1; the built-in bash is unchanged.` |
 
 ## 14. UI
@@ -390,4 +398,4 @@ Principle: policy lives in pure modules, tested with a fake clock and fake ports
 | Reaper only with own-spawn | Pi exposes pid or process-group control |
 | POSIX only | a Windows user base appears |
 
-Deferred (tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues)): persistence across resume and reload (#2); generic tool backgrounding (#5); stdin writes to a task (#6); a Monitor-style line-streaming tool (#7); Windows (#8); a standalone `bg_start` fallback (#9); richer task panel (#15).
+Deferred (tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues)): persistence across resume and reload (#2); generic tool backgrounding (#5); a Monitor-style line-streaming tool (#7); Windows (#8); a standalone `bg_start` fallback (#9); richer task panel (#15).

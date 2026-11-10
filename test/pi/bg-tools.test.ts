@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { registerBgTools } from "../../src/pi/bg-tools.js";
+import { MAX_WRITE_BYTES, registerBgTools } from "../../src/pi/bg-tools.js";
 import { makeHarness, type Harness } from "./w6a-services.js";
 
 const exit0 = { code: 0, signal: null };
@@ -15,9 +15,9 @@ const call = (h: Harness, name: string, params: unknown, opts: Parameters<Harnes
   h.pi.callTool(name, params, opts);
 
 describe("registration and validation", () => {
-  it("registers the four tools with snake_case schemas", async () => {
+  it("registers the five tools with snake_case schemas", async () => {
     const h = setup();
-    expect([...h.pi.tools.keys()].sort()).toEqual(["bg_kill", "bg_output", "bg_status", "bg_wait"]);
+    expect([...h.pi.tools.keys()].sort()).toEqual(["bg_kill", "bg_output", "bg_status", "bg_wait", "bg_write"]);
     await expect(call(h, "bg_output", {})).rejects.toThrow(/schema/); // id required
     await expect(call(h, "bg_status", { tailLines: 3, tail_lines: "x" })).rejects.toThrow(/schema/);
     await expect(call(h, "bg_wait", { timeout_s: 5000 })).rejects.toThrow(/schema/);
@@ -34,13 +34,13 @@ describe("inactive", () => {
   it("answers inactive when inactiveReason is set or config disabled, for every tool", async () => {
     const h = setup();
     h.s.inactiveReason = () => "pi-bg is inactive: bash is owned by other-ext; there are no background tasks.";
-    for (const [n, p] of [["bg_status", {}], ["bg_output", { id: "bg1" }], ["bg_wait", {}], ["bg_kill", { all: true }]] as const) {
+    for (const [n, p] of [["bg_status", {}], ["bg_output", { id: "bg1" }], ["bg_wait", {}], ["bg_kill", { all: true }], ["bg_write", { id: "bg1", data: "x" }]] as const) {
       await expect(call(h, n, p)).rejects.toThrow(/owned by other-ext/);
     }
     h.s.inactiveReason = undefined;
     h.config.enabled = false;
     await expect(call(h, "bg_status", {})).rejects.toThrow(/inactive.*Action/s);
-    expect(h.ui.msgs.length).toBe(5);
+    expect(h.ui.msgs.length).toBe(6);
   });
 });
 
@@ -368,5 +368,57 @@ describe("bg_kill", () => {
     const h = setup({ seed: 1 });
     await expect(call(h, "bg_kill", { id: "bg5" })).rejects.toThrow(/No task bg5/);
     await expect(call(h, "bg_kill", { id: "bg1" })).rejects.toThrow(/started before/);
+  });
+});
+
+describe("bg_write", () => {
+  it("writes to a task started with stdin and closes it on eof", async () => {
+    const h = setup();
+    h.start("repl", [], { stdin: true });
+    const r = await call(h, "bg_write", { id: "bg1", data: "héllo\n" });
+    expect(sc(r)).toEqual({ id: "bg1", written_bytes: 7, eof: false });
+    expect(text(r)).toBe("Wrote 7 bytes to the stdin of bg1.");
+    const r2 = await call(h, "bg_write", { id: "bg1", data: "", eof: true });
+    expect(sc(r2)).toEqual({ id: "bg1", written_bytes: 0, eof: true });
+    expect(text(r2)).toContain("Closed stdin");
+    expect(h.runner.writes).toEqual([{ data: "héllo\n", eof: false }, { data: "", eof: true }]);
+  });
+  it("accepts exactly the size limit and rejects one byte more, writing nothing", async () => {
+    const h = setup();
+    h.start("repl", [], { stdin: true });
+    expect(sc(await call(h, "bg_write", { id: "bg1", data: "x".repeat(MAX_WRITE_BYTES) })).written_bytes).toBe(MAX_WRITE_BYTES);
+    await expect(call(h, "bg_write", { id: "bg1", data: "x".repeat(MAX_WRITE_BYTES + 1) })).rejects.toThrow(/65537 bytes.*65536-byte limit.*Action: split/s);
+    expect(h.runner.writes).toHaveLength(1);
+  });
+  it("counts bytes, not characters", async () => {
+    const h = setup();
+    h.start("repl", [], { stdin: true });
+    await expect(call(h, "bg_write", { id: "bg1", data: "é".repeat(MAX_WRITE_BYTES / 2 + 1) })).rejects.toThrow(/limit/);
+  });
+  it("fails for a task started without stdin, naming cause and action", async () => {
+    const h = setup();
+    h.start("plain");
+    await expect(call(h, "bg_write", { id: "bg1", data: "x" })).rejects.toThrow(/bg1 was not started with stdin.*Action: start the command again with bash stdin true/s);
+    expect(h.runner.writes).toEqual([]);
+    expect(h.ui.msgs.some((m) => m.includes("not started with stdin"))).toBe(true);
+  });
+  it("fails for an exited task", async () => {
+    const h = setup();
+    h.start("repl", [{ at: 0, exit: exit0 }], { stdin: true });
+    await h.flush();
+    await expect(call(h, "bg_write", { id: "bg1", data: "x" })).rejects.toThrow(/bg1 has already ended \(exited\).*Action: use bg_output/s);
+    expect(h.runner.writes).toEqual([]);
+  });
+  it("fails after eof, relaying the runner's cause with an action", async () => {
+    const h = setup();
+    h.start("repl", [], { stdin: true });
+    await call(h, "bg_write", { id: "bg1", data: "", eof: true });
+    await expect(call(h, "bg_write", { id: "bg1", data: "more" })).rejects.toThrow(/Could not write to the stdin of bg1: stdin was already closed.*Action: read the output with bg_output/s);
+  });
+  it("fails for unknown and stale ids and for a missing data field", async () => {
+    const h = setup({ seed: 1 });
+    await expect(call(h, "bg_write", { id: "bg5", data: "x" })).rejects.toThrow(/No task bg5/);
+    await expect(call(h, "bg_write", { id: "bg1", data: "x" })).rejects.toThrow(/started before/);
+    await expect(call(h, "bg_write", { id: "bg5" })).rejects.toThrow(/schema/);
   });
 });

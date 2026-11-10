@@ -3,7 +3,7 @@
 // Wire* interfaces in src/pi/results.ts, and the round-trip tests tie them to the real producers.
 import { Type, type Static, type TSchema } from "typebox";
 import { Value } from "typebox/value";
-import type { WireHandoff, WireKill, WireOutput, WireStatus, WireWait } from "../../src/pi/results.js";
+import type { WireHandoff, WireKill, WireOutput, WireStatus, WireWait, WireWrite } from "../../src/pi/results.js";
 import type { ToolName } from "../../src/tools/schemas.js";
 
 const strict = { additionalProperties: false } as const;
@@ -74,6 +74,11 @@ export const WireKillSchema = Type.Object(
   strict,
 );
 
+export const WireWriteSchema = Type.Object(
+  { id: Type.String(), written_bytes: Type.Number(), eof: Type.Boolean() },
+  strict,
+);
+
 export const WireHandoffSchema = Type.Object(
   {
     task_id: Type.String(),
@@ -94,6 +99,7 @@ export const RESPONSE_SCHEMAS = {
   bg_output: WireOutputSchema,
   bg_wait: WireWaitSchema,
   bg_kill: WireKillSchema,
+  bg_write: WireWriteSchema,
 } satisfies Record<ToolName, TSchema>;
 
 // Mutual assignability of schema type and wire interface: fails to compile when either side drifts.
@@ -103,6 +109,7 @@ export const SAME_AS_WIRE = {
   bg_output: true as Same<Static<typeof WireOutputSchema>, WireOutput>,
   bg_wait: true as Same<Static<typeof WireWaitSchema>, WireWait>,
   bg_kill: true as Same<Static<typeof WireKillSchema>, WireKill>,
+  bg_write: true as Same<Static<typeof WireWriteSchema>, WireWrite>,
   bash: true as Same<Static<typeof WireHandoffSchema>, WireHandoff>,
 } satisfies Record<ToolName, true>;
 

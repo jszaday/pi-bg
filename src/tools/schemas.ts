@@ -1,4 +1,4 @@
-// TypeBox parameter schemas for the five pi-bg tools (DESIGN section 5). Wire keys are snake_case.
+// TypeBox parameter schemas for the six pi-bg tools (DESIGN section 5). Wire keys are snake_case.
 // TypeBox comes from the Pi host (peer dependency), so this module is outside src/core.
 
 import { Type, type Static } from "typebox";
@@ -19,6 +19,9 @@ export const BashParams = Type.Object({
     }),
   ),
   description: Type.Optional(Type.String({ description: "Short label shown in task lists." })),
+  stdin: Type.Optional(
+    Type.Boolean({ description: "Give the command a writable stdin that bg_write feeds (for prompts and interactive programs). Default false: stdin is closed and reads see EOF. Not available with the fallback runner." }),
+  ),
 });
 
 export const BgStatusParams = Type.Object({
@@ -65,9 +68,15 @@ export const BgKillParams = Type.Object({
   ),
 });
 
-export type ToolName = "bash" | "bg_status" | "bg_output" | "bg_wait" | "bg_kill";
+export const BgWriteParams = Type.Object({
+  id: Type.String({ description: "Task id such as bg3. The task must have been started with stdin true." }),
+  data: Type.String({ description: "Text to write to the task's stdin, exactly as given (add \\n for Enter). At most 65536 bytes per call; may be empty with eof true." }),
+  eof: Type.Optional(Type.Boolean({ description: "Close stdin after this write, so the program reads end of input. Default false." })),
+});
 
-export const TOOL_NAMES: readonly ToolName[] = ["bash", "bg_status", "bg_output", "bg_wait", "bg_kill"];
+export type ToolName = "bash" | "bg_status" | "bg_output" | "bg_wait" | "bg_kill" | "bg_write";
+
+export const TOOL_NAMES: readonly ToolName[] = ["bash", "bg_status", "bg_output", "bg_wait", "bg_kill", "bg_write"];
 
 export const SCHEMAS = {
   bash: BashParams,
@@ -75,6 +84,7 @@ export const SCHEMAS = {
   bg_output: BgOutputParams,
   bg_wait: BgWaitParams,
   bg_kill: BgKillParams,
+  bg_write: BgWriteParams,
 } satisfies Record<ToolName, unknown>;
 
 export type BashArgs = Static<typeof BashParams>;
@@ -82,3 +92,4 @@ export type BgStatusArgs = Static<typeof BgStatusParams>;
 export type BgOutputArgs = Static<typeof BgOutputParams>;
 export type BgWaitArgs = Static<typeof BgWaitParams>;
 export type BgKillArgs = Static<typeof BgKillParams>;
+export type BgWriteArgs = Static<typeof BgWriteParams>;

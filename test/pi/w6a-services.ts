@@ -21,7 +21,7 @@ export interface Harness {
   ui: { msgs: string[] };
   markSaw: MockInstance<(id: TaskId) => void>;
   /** Starts a background task on the fake runner with the scripted steps; output goes to ring and log, exit to the registry. */
-  start(command: string, steps?: Step[], over?: { notify?: NotifyLevel; log?: boolean }): Task;
+  start(command: string, steps?: Step[], over?: { notify?: NotifyLevel; log?: boolean; stdin?: boolean }): Task;
   /** Lets promise continuations (exit handlers, tool results) run. */
   flush(): Promise<void>;
 }
@@ -75,6 +75,7 @@ export function makeHarness(o: { caps?: Partial<RunnerCapabilities>; seed?: numb
       bgTimeoutMs: null,
       notify: over.notify ?? "done",
       startInBackground: true,
+      ...(over.stdin && { stdin: true }),
     });
     const tail = createTailBuffer(config.output.ringBytes);
     const rt: Services["runtime"] extends Map<string, infer R> ? R : never = { tail, timers: [] };
@@ -85,7 +86,7 @@ export function makeHarness(o: { caps?: Partial<RunnerCapabilities>; seed?: numb
       registry.dispatch(task.id, { type: "log_path", path: writer.path });
     }
     runner.script(steps);
-    const handle = runner.start({ command, cwd: "/" }, (chunk, stream) => {
+    const handle = runner.start({ command, cwd: "/", ...(over.stdin && { stdin: true }) }, (chunk, stream) => {
       tail.push(chunk);
       if (rt.log) rt.log.write(chunk, stream);
       registry.dispatch(task.id, { type: "output", bytes: chunk.length, at: clock.now() });

@@ -26,6 +26,8 @@ export class FakeRunner implements ProcessRunner {
   readonly started: RunSpec[] = [];
   // Every kill() call across all handles, in order.
   readonly kills: KillSignal[] = [];
+  // Every writeStdin() call across all handles, in order (data decoded as UTF-8). Only handles started with RunSpec.stdin have the method.
+  readonly writes: { data: string; eof: boolean }[] = [];
   private scripts: Step[][] = [];
   private nextPid = 10_000;
 
@@ -72,6 +74,16 @@ export class FakeRunner implements ProcessRunner {
         finish({ code: null, signal });
       },
     };
+
+    if (spec.stdin) {
+      let closed = false;
+      handle.writeStdin = (data, eof) => {
+        if (closed || exitInfo) return { error: closed ? "stdin was already closed by an earlier write with eof true" : "the program closed its stdin or has exited" };
+        this.writes.push({ data: new TextDecoder().decode(data), eof });
+        if (eof) closed = true;
+        return undefined;
+      };
+    }
 
     for (const s of steps) {
       if (s.at > 0) this.clock!.setTimeout(() => fire(s), s.at);

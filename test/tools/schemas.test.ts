@@ -7,6 +7,7 @@ import {
   BgStatusParams,
   BgWaitParams,
   SCHEMAS,
+  BgWriteParams,
   TOOL_NAMES,
   type BashArgs,
   type BgKillArgs,
@@ -29,6 +30,7 @@ const shapes = {
       run_in_background?: boolean;
       notify?: "off" | "error" | "done";
       description?: string;
+      stdin?: boolean;
     }
   >,
   status: true as Equal<BgStatusArgs, { id?: string; tail_lines?: number; include_finished?: boolean }>,
@@ -111,7 +113,7 @@ describe("tool schemas: accept and reject", () => {
 
 describe("SCHEMAS and TOOL_NAMES", () => {
   it("has one schema per tool name, in a fixed order", () => {
-    expect(TOOL_NAMES).toEqual(["bash", "bg_status", "bg_output", "bg_wait", "bg_kill"]);
+    expect(TOOL_NAMES).toEqual(["bash", "bg_status", "bg_output", "bg_wait", "bg_kill", "bg_write"]);
     expect(Object.keys(SCHEMAS).sort()).toEqual([...TOOL_NAMES].sort());
   });
 
@@ -121,10 +123,11 @@ describe("SCHEMAS and TOOL_NAMES", () => {
     expect(SCHEMAS.bg_output).toBe(BgOutputParams);
     expect(SCHEMAS.bg_wait).toBe(BgWaitParams);
     expect(SCHEMAS.bg_kill).toBe(BgKillParams);
+    expect(SCHEMAS.bg_write).toBe(BgWriteParams);
   });
 
   it("type ToolName is exactly the tool names", () => {
-    expectTypeOf<ToolName>().toEqualTypeOf<"bash" | "bg_status" | "bg_output" | "bg_wait" | "bg_kill">();
+    expectTypeOf<ToolName>().toEqualTypeOf<"bash" | "bg_status" | "bg_output" | "bg_wait" | "bg_kill" | "bg_write">();
   });
 
   it("the compile-time shape checks hold", () => {

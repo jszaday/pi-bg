@@ -55,6 +55,10 @@ export type FailureCode =
   | "wait_timeout"
   | "kill_args"
   | "kill_signal_unsupported"
+  | "write_no_stdin"
+  | "write_finished"
+  | "write_too_large"
+  | "write_failed"
   | "stream_unsupported"
   | "notify_failed"
   | "listener_failed"
@@ -285,6 +289,10 @@ export function waitText(r: { reason: WaitReason; waitedS: number; tasks: TaskSu
   return [head, ...lines].join("\n");
 }
 
+export function writeText(r: { id: TaskId; bytes: number; eof: boolean }): string {
+  return `Wrote ${r.bytes} bytes to the stdin of ${r.id}.${r.eof ? " Closed stdin (end of input)." : ""}`;
+}
+
 export function killText(r: KillResult): string {
   const lines: string[] = [];
   if (r.killed.length > 0) lines.push(`Killed: ${r.killed.join(", ")}.`);
@@ -359,6 +367,14 @@ export function failure(code: FailureCode, ctx: Record<string, string | number>)
         : "bg_kill needs exactly one of id or all. Action: call bg_kill with id set to a task id such as bg3, or with all true.";
     case "kill_signal_unsupported":
       return `bg_kill cannot send SIG${v(ctx, "signal")} because the fallback runner (Pi's native operations) can only abort a task with SIGKILL. Action: call bg_kill with signal KILL or without signal, or restore the own-spawn runner (a startup warning says why it is not in use).`;
+    case "write_no_stdin":
+      return `${v(ctx, "id")} was not started with stdin, so it cannot take input. Action: start the command again with bash stdin true, then write with bg_write.`;
+    case "write_finished":
+      return `${v(ctx, "id")} has already ended (${v(ctx, "state")}), so it cannot take input. Action: use bg_output to read what it printed, or start the command again.`;
+    case "write_too_large":
+      return `The write is ${v(ctx, "bytes")} bytes, over the ${v(ctx, "limit")}-byte limit for one bg_write call. Action: split the data into several bg_write calls.`;
+    case "write_failed":
+      return `Could not write to the stdin of ${v(ctx, "id")}: ${v(ctx, "error")}. Action: read the output with bg_output to see why, and start the command again with stdin true if it still needs input.`;
     case "stream_unsupported":
       return `Stream ${v(ctx, "stream")} was requested, but this runner only provides combined output, so combined output is returned. Action: omit stream or use combined.`;
     case "notify_failed":

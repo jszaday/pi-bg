@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task, TaskSummary, WaitResult } from "../../src/contract.js";
-import { RESULT_MAPPERS, toBashHandoffResult, toKillResult, toOutputResult, toStatusResult, toWaitResult } from "../../src/pi/results.js";
+import { RESULT_MAPPERS, toBashHandoffResult, toKillResult, toOutputResult, toStatusResult, toWaitResult, toWriteResult } from "../../src/pi/results.js";
 import type { WireHandoff, WireKill, WireOutput, WireStatus, WireWait } from "../../src/pi/results.js";
 import { TOOL_NAMES } from "../../src/tools/schemas.js";
 
@@ -52,6 +52,11 @@ describe("results mappers", () => {
   it("maps kill to already_finished", () => {
     const w = toKillResult({ killed: ["bg1"], alreadyFinished: ["bg2"], failed: [{ id: "bg3", error: "e" }] }).structuredContent as unknown as WireKill;
     expect(w).toEqual({ killed: ["bg1"], already_finished: ["bg2"], failed: [{ id: "bg3", error: "e" }] });
+  });
+  it("toWriteResult maps to snake_case wire and text", () => {
+    const r = toWriteResult({ id: "bg1", bytes: 3, eof: true });
+    expect(r.structuredContent).toEqual({ id: "bg1", written_bytes: 3, eof: true });
+    expect((r.content[0] as { text: string }).text).toBe("Wrote 3 bytes to the stdin of bg1. Closed stdin (end of input).");
   });
   it("RESULT_MAPPERS has one entry per tool name", () => {
     expect(Object.keys(RESULT_MAPPERS).sort()).toEqual([...TOOL_NAMES].sort());
