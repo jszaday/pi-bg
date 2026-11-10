@@ -39,6 +39,7 @@ export function installMoveKey(
   if (ctx.mode !== "tui" || !ctx.hasUI) return () => {};
   // Executed in tmux (spike S4): the listener runs mid-tool with the editor focused, so no registerShortcut fallback is needed.
   const unsubscribeMove = ctx.ui.onTerminalInput((data) => {
+    if (isKeyRelease(data)) return undefined; // Pi hands listeners kitty releases too; only the press moves
     if (deps.registry.movable().length === 0) return undefined;
     if (!matchesKey(data, deps.key() as KeyId)) return undefined;
     if (ctx.ui.getEditorText() !== "") return undefined; // the user is editing a prompt: leave the key to the editor (cursor-left)
