@@ -79,6 +79,25 @@ describe("killTasks", () => {
     expect(r.failed[0].error).not.toContain("SIGTERM");
     expect(r.failed[0].error).toContain("Action");
   });
+  it("sends the chosen signal once per task", async () => {
+    const h = makeHarness();
+    const t = h.start("a");
+    await killTasks(h.s, [t.id], "bg_kill", "int");
+    expect(h.runner.kills).toEqual(["int"]);
+  });
+  it("names the chosen signal when the process never exits", async () => {
+    const h = makeHarness();
+    const t = h.s.registry.create({ command: "x", cwd: "/", hardTimeoutMs: null, bgTimeoutMs: null, notify: "done", startInBackground: true });
+    const handle: ProcessHandle = { pid: 4242, exited: new Promise(() => {}), kill: vi.fn() };
+    h.s.runtime.set(t.id, { handle, tail: { push() {}, lines: () => [], partial: () => "", lastLine: () => undefined, totalBytes: () => 0 }, timers: [] });
+    const p = killTasks(h.s, [t.id], "bg_kill", "hup");
+    await h.flush();
+    h.clock.advance(h.config.kill.termGraceMs + 2000);
+    const r = await p;
+    expect(handle.kill).toHaveBeenCalledWith("hup");
+    expect(r.failed[0].error).toContain("after SIGHUP and the runner's SIGKILL escalation");
+    expect(r.failed[0].error).not.toContain("SIGTERM");
+  });
   it("fails a running task that has no process handle", async () => {
     const h = makeHarness();
     const t = h.s.registry.create({ command: "x", cwd: "/", hardTimeoutMs: null, bgTimeoutMs: null, notify: "done", startInBackground: true });

@@ -133,6 +133,22 @@ describe("own-spawn specifics", () => {
     expect(r.exit.signal).toBe("SIGTERM");
     expect(await waitFor(() => !alive(gc), 2000)).toBe(true);
   });
+  it.each([["int", "INT"], ["hup", "HUP"], ["quit", "QUIT"], ["usr1", "USR1"], ["usr2", "USR2"]] as const)("kill('%s') sends SIG%s to the group, then the process exits", async (sig, name) => {
+    const d = tmp();
+    const r = await run(own(2000), { command: `trap 'echo got-${name}; exit 0' ${name}; echo ready > ${d}/r; while :; do sleep 0.05; done`, cwd: d, env: env() }, (h) => {
+      void waitFor(() => fs.existsSync(`${d}/r`)).then(() => h.kill(sig));
+    });
+    expect(r.combined.toString()).toContain(`got-${name}`);
+    expect(r.exit.code).toBe(0);
+    expect(r.ms).toBeLessThan(1900);
+  });
+  it("a signal the program ignores still escalates to SIGKILL after termGraceMs", async () => {
+    const d = tmp();
+    const r = await run(own(300), { command: `trap '' INT; echo ready > ${d}/r; while :; do sleep 0.05; done`, cwd: d, env: env() }, (h) => {
+      void waitFor(() => fs.existsSync(`${d}/r`)).then(() => h.kill("int"));
+    });
+    expect(r.exit.signal).toBe("SIGKILL");
+  });
   it("kill('kill') is immediate and idempotent; kill after exit is a no-op", async () => {
     const r = await run(own(60_000), { command: "sleep 60", cwd: tmp(), env: env() }, (h) => { setTimeout(() => { h.kill("kill"); h.kill("kill"); }, 100); });
     expect(r.exit.signal).toBe("SIGKILL");

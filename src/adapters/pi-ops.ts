@@ -33,7 +33,7 @@ export function createPiOpsRunner(ops: { exec: BashOperations["exec"] }): Proces
       })();
       return {
         exited,
-        kill() {
+        kill() { // every signal is an abort: bg_kill refuses other signals for this runner before getting here
           ac.abort();
         },
       };

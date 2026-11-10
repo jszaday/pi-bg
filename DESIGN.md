@@ -102,7 +102,7 @@ Risk and fallback: the native tool rethrows the sentinel unchanged (section 2), 
 
 ### 4.2 Process runner adapters
 
-`ProcessRunner.start(spec, sink)` returns `{pid?, exited: Promise<ExitInfo>, kill(mode)}` and advertises capabilities `{pid, splitStreams, gracefulTerm}`. Two adapters:
+`ProcessRunner.start(spec, sink)` returns `{pid?, exited: Promise<ExitInfo>, kill(signal)}` and advertises capabilities `{pid, splitStreams, gracefulTerm}`. Two adapters:
 
 - Pi-ops adapter: wraps `createLocalBashOperations`. Reuses Pi's shell resolution, environment, detached spawn, process-tree kill and its tracked-pid cleanup on Pi's exit signals. Limits: no pid, merged streams, kill is SIGKILL of the tree with no grace period.
 - Own-spawn adapter: `child_process.spawn` detached into its own process group, stdout and stderr piped separately, SIGTERM with a grace period then SIGKILL to the group. Gives the pid, split streams (R5 wording "stdout/stderr"), graceful stop, and the pid needed by the orphan reaper (section 12). Cost: it duplicates Pi's shell setup (shell path, command prefix, environment).
@@ -152,7 +152,7 @@ Result: `{reason, waited_s, tasks: TaskSummary[]}` with `reason` one of `finishe
 
 ### 5.5 `bg_kill`
 
-Parameters: `id?: string`, `all?: boolean` (exactly one required). Kills the process group: SIGTERM, then SIGKILL after `kill.termGraceMs` (3 s) if it is still alive; with a runner that cannot send SIGTERM (Pi-ops adapter) it is SIGKILL at once. The runner owns the escalation timer.
+Parameters: `id?: string`, `all?: boolean` (exactly one required), `signal?: "INT"|"HUP"|"TERM"|"QUIT"|"USR1"|"USR2"|"KILL"` (default `TERM`). Kills the process group: the chosen signal (`ProcessHandle.kill` takes it lowercase), then SIGKILL after `kill.termGraceMs` (3 s) if it is still alive; with `KILL` it is SIGKILL at once. With a runner that cannot send other signals (Pi-ops adapter) the default is SIGKILL at once, and an explicit signal other than `KILL` is rejected before any task is touched (`kill_signal_unsupported`, naming the cause and the action). The runner owns the escalation timer.
 
 Result: `{killed: id[], already_finished: id[], failed: {id, error}[]}`. A killed task enters `killed` and its notification is suppressed (the agent caused it and sees the result here). Kills with cause `bg_kill`, `command` (the `/bg kill` command) or `shutdown` suppress notifications; `turn_abort` (Esc on a foreground task) never reaches the notification policy because the task is not in the background.
 
@@ -388,4 +388,4 @@ Principle: policy lives in pure modules, tested with a fake clock and fake ports
 | Reaper only with own-spawn | Pi exposes pid or process-group control |
 | POSIX only | a Windows user base appears |
 
-Deferred (tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues)): persistence across resume and reload (#2); generic tool backgrounding (#5); stdin writes to a task (#6); a Monitor-style line-streaming tool (#7); Windows (#8); a standalone `bg_start` fallback (#9); signal choice on `bg_kill` (#10); richer task panel (#15).
+Deferred (tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues)): persistence across resume and reload (#2); generic tool backgrounding (#5); stdin writes to a task (#6); a Monitor-style line-streaming tool (#7); Windows (#8); a standalone `bg_start` fallback (#9); richer task panel (#15).

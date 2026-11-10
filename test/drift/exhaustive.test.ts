@@ -1,7 +1,8 @@
 // Exhaustiveness: each table must list every member of its union. When a union grows, typecheck fails here until the
 // table (and so the code that consumes it) is updated.
 import { describe, expect, it } from "vitest";
-import type { HandoffReason, KillCause, NotifyStatus, TaskState, TerminalState, WaitReason } from "../../src/contract.js";
+import type { BgKillArgs } from "../../src/tools/schemas.js";
+import type { HandoffReason, KillCause, KillSignal, NotifyStatus, TaskState, TerminalState, WaitReason } from "../../src/contract.js";
 import { failure, type FailureCode } from "../../src/core/format.js";
 
 const TASK_STATE = {
@@ -29,6 +30,7 @@ const FAILURE_CTX = {
   wait_none: {},
   wait_timeout: { seconds: 5 },
   kill_args: { both: 1 },
+  kill_signal_unsupported: { signal: "INT" },
   stream_unsupported: { stream: "stderr" },
   notify_failed: { error: "boom" },
   listener_failed: { id: "bg1", error: "oops" },
@@ -72,3 +74,7 @@ describe("failure() covers every FailureCode", () => {
     });
   }
 });
+
+// bg_kill's wire enum is the uppercase form of the contract's KillSignal; a signal added to one and not the other fails to compile.
+type SameType<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+export const KILL_SIGNAL_PARITY: SameType<Uppercase<KillSignal>, NonNullable<BgKillArgs["signal"]>> = true;

@@ -1,6 +1,7 @@
 import type {
   ExitInfo,
   OutputSink,
+  KillSignal,
   ProcessHandle,
   ProcessRunner,
   RunnerCapabilities,
@@ -24,7 +25,7 @@ export class FakeRunner implements ProcessRunner {
   // Every RunSpec passed to start(), in order.
   readonly started: RunSpec[] = [];
   // Every kill() call across all handles, in order.
-  readonly kills: ("term" | "kill")[] = [];
+  readonly kills: KillSignal[] = [];
   private scripts: Step[][] = [];
   private nextPid = 10_000;
 
@@ -65,9 +66,9 @@ export class FakeRunner implements ProcessRunner {
     const handle: ProcessHandle = {
       pid,
       exited,
-      kill: (mode) => {
-        this.kills.push(mode);
-        const signal = mode === "term" && this.capabilities.gracefulTerm ? "SIGTERM" : "SIGKILL";
+      kill: (sig) => {
+        this.kills.push(sig);
+        const signal = sig !== "kill" && this.capabilities.gracefulTerm ? `SIG${sig.toUpperCase()}` : "SIGKILL";
         finish({ code: null, signal });
       },
     };

@@ -51,7 +51,7 @@ Ask the agent: "Start the dev server in the background, then check that it came 
 
 `bg_wait` blocks until a task ends (or until any or all of a set of tasks end) or until a timeout passes. The wait is interruptible: a user message, or Esc, returns control to the agent.
 
-`bg_kill` stops one task by id, or all tasks. It sends SIGTERM to the task's process group and sends SIGKILL if the group is still alive after a short grace period.
+`bg_kill` stops one task by id, or all tasks. It sends SIGTERM to the task's process group and sends SIGKILL if the group is still alive after a short grace period. The optional `signal` (`INT`, `HUP`, `TERM`, `QUIT`, `USR1`, `USR2` or `KILL`) replaces the first signal; `KILL` skips the grace period. The fallback runner accepts only `KILL`.
 
 ## Commands
 

@@ -1,6 +1,6 @@
 // bg_status, bg_output, bg_wait, bg_kill (DESIGN sections 5.2 to 5.5, 8, 13).
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { StreamName, Task, TaskId, TaskSummary } from "../contract.js";
+import type { KillSignal, StreamName, Task, TaskId, TaskSummary } from "../contract.js";
 import { failure } from "../core/format.js";
 import { grepLines, normalizeForDisplay } from "../core/tail.js";
 import { isTerminal } from "../core/task.js";
@@ -232,8 +232,11 @@ async function kill(s: Services, p: BgKillArgs, ctx: ExtensionContext): Promise<
   if (hasId === hasAll) {
     fail(s, failure("kill_args", { both: hasId ? 1 : 0 }));
   }
+  if (p.signal !== undefined && p.signal !== "KILL" && !s.runner().capabilities.gracefulTerm) {
+    fail(s, failure("kill_signal_unsupported", { signal: p.signal }));
+  }
   if (p.id !== undefined) lookup(s, p.id);
-  const r = await killTasks(s, p.id !== undefined ? [p.id] : "all", "bg_kill");
+  const r = await killTasks(s, p.id !== undefined ? [p.id] : "all", "bg_kill", p.signal === undefined ? undefined : (p.signal.toLowerCase() as KillSignal));
   sawTerminal(s, [...r.killed, ...r.alreadyFinished].map((id) => s.registry.get(id)).filter((t): t is Task => t !== undefined));
   return toKillResult(r);
 }
@@ -268,7 +271,7 @@ export function registerBgTools(pi: ExtensionAPI, s: Services): void {
   pi.registerTool({
     name: "bg_kill",
     label: "bg_kill",
-    description: "Stop a background task by id, or every running one with all true (give exactly one). Sends SIGTERM, then SIGKILL after a grace period.",
+    description: "Stop a background task by id, or every running one with all true (give exactly one). Sends SIGTERM (or the signal you choose), then SIGKILL after a grace period.",
     promptSnippet: "bg_kill: stop one background task (id) or all of them (all)",
     parameters: SCHEMAS.bg_kill,
     execute: (_id, params, _signal, _onUpdate, ctx) => kill(s, params, ctx),
