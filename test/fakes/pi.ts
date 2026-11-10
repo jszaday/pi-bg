@@ -1,9 +1,42 @@
 import type { AgentToolResult, ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Value } from "typebox/value";
 
+export interface FakeComponent {
+  render(width: number): string[];
+  invalidate(): void;
+  handleInput?(data: string): void;
+  dispose?(): void;
+}
+
+export interface FakeTui {
+  renders: number;
+  requestRender(force?: boolean): void;
+  hasOverlay(): boolean;
+  getFocusedComponent(): unknown;
+  terminal: { rows: number; columns: number };
+}
+
+// Theme stand-in: inverse wraps the text in the same escapes as Pi's chalk.inverse.
+export const fakeTheme = { inverse: (t: string) => `\x1b[7m${t}\x1b[27m` };
+
+export interface FakeOverlay {
+  component: FakeComponent;
+  opts: unknown;
+  closed: boolean;
+  /** Settles when done() is called. */
+  result: Promise<unknown>;
+}
+
 // Recorder for the parts of the context pi-bg reads.
 export interface FakeUi {
-  widgets: { key: string; content: string[] | undefined }[];
+  // A factory widget records content "factory" and its component in `widgetComponents`.
+  widgets: { key: string; content: string[] | "factory" | undefined }[];
+  widgetComponents: Map<string, FakeComponent>;
+  tui: FakeTui;
+  // Focused component the fake TUI reports; defaults to an editor that is not showing autocomplete.
+  focused: unknown;
+  editor: { isShowingAutocomplete(): boolean };
+  overlays: FakeOverlay[];
   statuses: { key: string; text: string | undefined }[];
   notices: { msg: string; level: "info" | "warning" | "error" | undefined }[];
   // Registered terminal input listeners, in registration order.
@@ -11,7 +44,14 @@ export interface FakeUi {
   // Text in the editor; the test sets it. getEditorText() returns it.
   editorText: string;
   getEditorText(): string;
-  setWidget(key: string, content: string[] | undefined): void;
+  setWidget(
+    key: string,
+    content: string[] | ((tui: FakeTui, theme: typeof fakeTheme) => FakeComponent) | undefined,
+  ): void;
+  custom(
+    factory: (tui: FakeTui, theme: typeof fakeTheme, kb: unknown, done: (r?: unknown) => void) => FakeComponent,
+    opts?: unknown,
+  ): Promise<unknown>;
   setStatus(key: string, text: string | undefined): void;
   notify(msg: string, level?: "info" | "warning" | "error"): void;
   onTerminalInput(handler: FakeUi["listeners"][number]): () => void;
@@ -31,8 +71,22 @@ export interface FakeCtx {
 type Handler = (payload: unknown, ctx: FakeCtx) => unknown;
 
 function createUi(): FakeUi {
+  const editor = { isShowingAutocomplete: () => false };
   const ui: FakeUi = {
     widgets: [],
+    widgetComponents: new Map(),
+    overlays: [],
+    editor,
+    focused: editor,
+    tui: {
+      renders: 0,
+      requestRender() {
+        ui.tui.renders++;
+      },
+      hasOverlay: () => ui.overlays.some((o) => !o.closed),
+      getFocusedComponent: () => ui.focused,
+      terminal: { rows: 30, columns: 100 },
+    },
     statuses: [],
     notices: [],
     listeners: [],
@@ -41,7 +95,26 @@ function createUi(): FakeUi {
       return ui.editorText;
     },
     setWidget(key, content) {
-      ui.widgets.push({ key, content });
+      ui.widgetComponents.get(key)?.dispose?.();
+      ui.widgetComponents.delete(key);
+      if (typeof content === "function") {
+        ui.widgets.push({ key, content: "factory" });
+        ui.widgetComponents.set(key, content(ui.tui, fakeTheme));
+      } else ui.widgets.push({ key, content });
+    },
+    custom(factory, opts) {
+      let finish!: (r?: unknown) => void;
+      const result = new Promise<unknown>((resolve) => (finish = resolve));
+      const overlay = { opts, closed: false, result } as FakeOverlay;
+      const done = (r?: unknown): void => {
+        if (overlay.closed) return;
+        overlay.closed = true;
+        overlay.component.dispose?.();
+        finish(r);
+      };
+      overlay.component = factory(ui.tui, fakeTheme, undefined, done);
+      ui.overlays.push(overlay);
+      return result;
     },
     setStatus(key, text) {
       ui.statuses.push({ key, text });
@@ -62,6 +135,8 @@ function createUi(): FakeUi {
         if (r?.consume) return true;
         if (r?.data !== undefined) current = r.data;
       }
+      // Nothing consumed it: the focused overlay (if any) gets the key, as Pi's TUI does.
+      ui.overlays.filter((o) => !o.closed).at(-1)?.component.handleInput?.(current);
       return false;
     },
   };
