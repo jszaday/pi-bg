@@ -8,6 +8,9 @@ export interface FakeUi {
   notices: { msg: string; level: "info" | "warning" | "error" | undefined }[];
   // Registered terminal input listeners, in registration order.
   listeners: ((data: string) => { consume?: boolean; data?: string } | undefined)[];
+  // Text in the editor; the test sets it. getEditorText() returns it.
+  editorText: string;
+  getEditorText(): string;
   setWidget(key: string, content: string[] | undefined): void;
   setStatus(key: string, text: string | undefined): void;
   notify(msg: string, level?: "info" | "warning" | "error"): void;
@@ -33,6 +36,10 @@ function createUi(): FakeUi {
     statuses: [],
     notices: [],
     listeners: [],
+    editorText: "",
+    getEditorText() {
+      return ui.editorText;
+    },
     setWidget(key, content) {
       ui.widgets.push({ key, content });
     },
