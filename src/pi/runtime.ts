@@ -27,6 +27,8 @@ export interface TaskRuntime {
   log?: LogWriter;
   tail: TailBuffer;
   timers: TimerHandle[];
+  /** Receives every output chunk of the task. Set by whichever instance currently owns the task (the starter, then an instance adopting it across /reload), so output reaches that instance's monitor policy and not a disposed one. */
+  onOutput?: (chunk: Uint8Array) => void;
   /** Set by evictFinished: the output ring was released; readers answer from the log instead. The handle stays (shutdown still signals a job left in the group). */
   evicted?: true;
 }

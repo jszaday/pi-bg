@@ -551,6 +551,20 @@ describe("bg_monitor", () => {
     await h.flush();
     expect(sc(await call(h, "bg_monitor", { id: "bg1", stop: true })).monitoring).toBe(false);
   });
+  it("a monitor message does not end an active bg_wait", async () => {
+    const h = setup();
+    h.start("srv", [{ at: 100, chunk: "x\n" }, { at: 3000, exit: exit0 }]);
+    await call(h, "bg_monitor", { id: "bg1" });
+    let settled = false;
+    const w = call(h, "bg_wait", { ids: ["bg1"], timeout_s: 10 }).then((r) => { settled = true; return r; });
+    h.clock.advance(100 + MONITOR_BATCH_MS);
+    await h.flush();
+    expect(monitored(h)).toEqual([["x"]]);
+    expect(settled).toBe(false);
+    h.clock.advance(2000);
+    await h.flush();
+    expect(sc(await w).reason).toBe("finished");
+  });
   it("fails for an ended task, naming cause and action, and starts nothing", async () => {
     const h = setup();
     h.start("job", [{ at: 0, exit: exit0 }]);
