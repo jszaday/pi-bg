@@ -1,9 +1,9 @@
 // Notification delivery glue (DESIGN section 9): the sendMessage sink and the ack/loss wiring (S5).
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { NotificationSink } from "../contract.js";
-import { notificationText } from "../core/format.js";
+import type { MonitorSink, NotificationSink } from "../contract.js";
+import { monitorText, notificationText } from "../core/format.js";
 import type { NotificationPolicy } from "../core/notify-policy.js";
-import { NOTIFICATION_TYPE, type NotificationDetails } from "./runtime.js";
+import { MONITOR_TYPE, NOTIFICATION_TYPE, type MonitorDetails, type NotificationDetails } from "./runtime.js";
 
 /** `onError` receives a failed send (for example a stale `pi` after reload); the policy has already marked the task sent. */
 export function createNotificationSink(pi: ExtensionAPI, onError?: (e: unknown) => void): NotificationSink {
@@ -14,6 +14,23 @@ export function createNotificationSink(pi: ExtensionAPI, onError?: (e: unknown) 
         pi.sendMessage(
           { customType: NOTIFICATION_TYPE, content: notificationText(batch), display: true, details },
           // S5: nextTurn never wakes an idle agent, so triggerTurn is not passed for it.
+          { deliverAs: opts.deliverAs, triggerTurn: opts.deliverAs === "nextTurn" ? false : opts.triggerTurn },
+        );
+      } catch (e) {
+        onError?.(e);
+      }
+    },
+  };
+}
+
+/** Same delivery rule and error path as the task sink. Monitor messages are informational: they are never acked or redelivered (the log keeps the output). */
+export function createMonitorSink(pi: ExtensionAPI, onError?: (e: unknown) => void): MonitorSink {
+  return {
+    send(batch, opts) {
+      const details: MonitorDetails = { batch };
+      try {
+        pi.sendMessage(
+          { customType: MONITOR_TYPE, content: monitorText(batch), display: true, details },
           { deliverAs: opts.deliverAs, triggerTurn: opts.deliverAs === "nextTurn" ? false : opts.triggerTurn },
         );
       } catch (e) {

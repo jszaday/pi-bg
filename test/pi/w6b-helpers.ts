@@ -1,9 +1,10 @@
 import { createIdAllocator } from "../../src/core/ids.js";
 import { DEFAULT_CONFIG } from "../../src/core/config.js";
+import { MonitorPolicy } from "../../src/core/monitor-policy.js";
 import { TaskRegistry } from "../../src/core/registry.js";
 import type { BgConfig, ProcessRunner } from "../../src/contract.js";
 import type { Reaper, Services } from "../../src/pi/runtime.js";
-import { FakeClock, FakeRunner, MemLogStore } from "../fakes/index.js";
+import { FakeClock, FakeMonitorSink, FakeRunner, MemLogStore } from "../fakes/index.js";
 
 export interface W6bEnv {
   s: Services;
@@ -14,6 +15,7 @@ export interface W6bEnv {
   refreshes: { n: number };
   reaper: { watched: [number, number][]; unwatched: number[] } & Reaper;
   config: BgConfig;
+  monitorSink: FakeMonitorSink;
 }
 
 export function w6bEnv(over: { config?: Partial<BgConfig>; runner?: ProcessRunner } = {}): W6bEnv {
@@ -33,6 +35,7 @@ export function w6bEnv(over: { config?: Partial<BgConfig>; runner?: ProcessRunne
       this.unwatched.push(pgid);
     },
   };
+  const monitorSink = new FakeMonitorSink();
   const s = {
     clock,
     config: () => config,
@@ -40,13 +43,14 @@ export function w6bEnv(over: { config?: Partial<BgConfig>; runner?: ProcessRunne
     runtime: new Map(),
     runner: () => over.runner ?? runner,
     logs,
+    monitors: new MonitorPolicy({ clock, config: config.notify, sink: monitorSink }),
     overrides: {},
     ctx: {},
     ui: { refresh: () => void refreshes.n++, notify: (msg: string, level: string) => notices.push({ msg, level }) },
     sessionId: () => "sess",
     reaper,
   } as unknown as Services;
-  return { s, clock, runner, logs, notices, refreshes, reaper, config };
+  return { s, clock, runner, logs, notices, refreshes, reaper, config, monitorSink };
 }
 
 /** Lets pending promise continuations run (no timers involved). */

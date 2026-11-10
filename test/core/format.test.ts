@@ -363,9 +363,9 @@ describe("failure texts (golden, one per code)", () => {
 });
 
 describe("BASH_GUIDELINES", () => {
-  it("names the five tools and the run_in_background and bg_timeout guidance", () => {
+  it("names the tools and the run_in_background and bg_timeout guidance", () => {
     const text = BASH_GUIDELINES.join("\n");
-    for (const name of ["bg_status", "bg_output", "bg_wait", "bg_kill", "run_in_background", "bg_timeout"]) {
+    for (const name of ["bg_status", "bg_output", "bg_wait", "bg_kill", "bg_monitor", "run_in_background", "bg_timeout"]) {
       expect(text).toContain(name);
     }
   });

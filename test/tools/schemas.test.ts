@@ -7,6 +7,7 @@ import {
   BgStatusParams,
   BgWaitParams,
   SCHEMAS,
+  BgMonitorParams,
   BgWriteParams,
   TOOL_NAMES,
   type BashArgs,
@@ -111,9 +112,22 @@ describe("tool schemas: accept and reject", () => {
   });
 });
 
+describe("bg_monitor params", () => {
+  it("requires id and bounds max_notifications to 1..100", () => {
+    expect(accepts(BgMonitorParams, { id: "bg3" })).toBe(true);
+    expect(accepts(BgMonitorParams, { id: "bg3", grep: "ERR", max_notifications: 100, stop: false })).toBe(true);
+    expect(accepts(BgMonitorParams, { id: "bg3", max_notifications: 1 })).toBe(true);
+    expect(accepts(BgMonitorParams, {})).toBe(false);
+    expect(accepts(BgMonitorParams, { id: "bg3", max_notifications: 0 })).toBe(false);
+    expect(accepts(BgMonitorParams, { id: "bg3", max_notifications: 101 })).toBe(false);
+    expect(accepts(BgMonitorParams, { id: "bg3", max_notifications: 2.5 })).toBe(false);
+    expect(accepts(BgMonitorParams, { id: "bg3", stop: "yes" })).toBe(false);
+  });
+});
+
 describe("SCHEMAS and TOOL_NAMES", () => {
   it("has one schema per tool name, in a fixed order", () => {
-    expect(TOOL_NAMES).toEqual(["bash", "bg_status", "bg_output", "bg_wait", "bg_kill", "bg_write"]);
+    expect(TOOL_NAMES).toEqual(["bash", "bg_status", "bg_output", "bg_wait", "bg_kill", "bg_write", "bg_monitor"]);
     expect(Object.keys(SCHEMAS).sort()).toEqual([...TOOL_NAMES].sort());
   });
 
@@ -124,10 +138,11 @@ describe("SCHEMAS and TOOL_NAMES", () => {
     expect(SCHEMAS.bg_wait).toBe(BgWaitParams);
     expect(SCHEMAS.bg_kill).toBe(BgKillParams);
     expect(SCHEMAS.bg_write).toBe(BgWriteParams);
+    expect(SCHEMAS.bg_monitor).toBe(BgMonitorParams);
   });
 
   it("type ToolName is exactly the tool names", () => {
-    expectTypeOf<ToolName>().toEqualTypeOf<"bash" | "bg_status" | "bg_output" | "bg_wait" | "bg_kill" | "bg_write">();
+    expectTypeOf<ToolName>().toEqualTypeOf<"bash" | "bg_status" | "bg_output" | "bg_wait" | "bg_kill" | "bg_write" | "bg_monitor">();
   });
 
   it("the compile-time shape checks hold", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createNotificationSink, installNotifyHandlers } from "../../src/pi/notify.js";
-import { NOTIFICATION_TYPE, type NotificationDetails } from "../../src/pi/runtime.js";
+import { createMonitorSink, createNotificationSink, installNotifyHandlers } from "../../src/pi/notify.js";
+import { MONITOR_TYPE, NOTIFICATION_TYPE, type MonitorDetails, type NotificationDetails } from "../../src/pi/runtime.js";
 import { FakePi } from "../fakes/index.js";
 import { w8Services, w8Task } from "./w8-helpers.js";
 
@@ -104,5 +104,66 @@ describe("ack and loss wiring", () => {
     expect((pi.messages[1].msg as { details: NotificationDetails }).details.batch.redelivery).toBe(true);
     await pi.emit("agent_settled", { type: "agent_settled", aborted: true });
     expect(pi.messages).toHaveLength(2);
+  });
+});
+
+describe("monitor sink", () => {
+  const batch = { id: "bg1", lines: ["ready"], omitted: 0, maxNotifications: 10 };
+  const cases: [string, "steer" | "followUp" | "nextTurn", boolean, boolean][] = [
+    ["steer + wake", "steer", true, true],
+    ["followUp, wake off", "followUp", false, false],
+    ["nextTurn never triggers a turn", "nextTurn", true, false],
+  ];
+  for (const [name, deliverAs, triggerTurn, expected] of cases) {
+    it(`sends pi-bg:monitor, ${name}`, () => {
+      const pi = new FakePi();
+      createMonitorSink(pi.asExtensionAPI()).send(batch, { deliverAs, triggerTurn });
+      expect(pi.messages).toHaveLength(1);
+      expect(pi.messages[0].opts).toEqual({ deliverAs, triggerTurn: expected });
+      const msg = pi.messages[0].msg as { customType: string; display: boolean; content: string; details: MonitorDetails };
+      expect(msg.customType).toBe(MONITOR_TYPE);
+      expect(msg.customType).not.toBe(NOTIFICATION_TYPE);
+      expect(msg.display).toBe(true);
+      expect(msg.content).toContain("Monitor bg1: 1 new line:");
+      expect(msg.details.batch).toEqual(batch);
+    });
+  }
+
+  it("reports a failing send through onError without throwing", () => {
+    const pi = new FakePi();
+    pi.sendMessage = () => { throw new Error("stale"); };
+    const errs: unknown[] = [];
+    expect(() => createMonitorSink(pi.asExtensionAPI(), (e) => errs.push(e)).send(batch, { deliverAs: "steer", triggerTurn: true })).not.toThrow();
+    expect(errs).toHaveLength(1);
+  });
+
+  it("the last monitor lines are sent before the task-end notification", () => {
+    const pi = new FakePi();
+    const api = pi.asExtensionAPI();
+    const h = w8Services({
+      config: { notify: { default: "done", delivery: "steer", wake: true, batchMs: 0 } },
+      sink: createNotificationSink(api),
+      monitorSink: createMonitorSink(api),
+    });
+    const t = w8Task(h);
+    h.monitors.start(t.id, { maxNotifications: 10 });
+    h.monitors.onOutput(t.id, new TextEncoder().encode("final words"));
+    finish(h, t.id);
+    expect(pi.messages.map((m) => (m.msg as { customType: string }).customType)).toEqual([MONITOR_TYPE, NOTIFICATION_TYPE]);
+    expect((pi.messages[0].msg as { content: string }).content).toContain("final words");
+  });
+
+  it("monitor messages are not acked or redelivered", async () => {
+    const pi = new FakePi();
+    const api = pi.asExtensionAPI();
+    const h = w8Services({ monitorSink: createMonitorSink(api) });
+    installNotifyHandlers(api, h.notify);
+    const t = w8Task(h);
+    h.monitors.start(t.id, { maxNotifications: 10 });
+    h.monitors.onOutput(t.id, new TextEncoder().encode("x\n"));
+    h.clock.advance(1000);
+    await pi.emit("message_end", { type: "message_end", message: { role: "custom", customType: MONITOR_TYPE, details: { batch: { id: t.id } } } });
+    await pi.emit("agent_settled", { type: "agent_settled", aborted: true });
+    expect(pi.messages).toHaveLength(1);
   });
 });

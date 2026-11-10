@@ -19,6 +19,7 @@ export const BASH_GUIDELINES: string[] = [
   "Background anything that may run long or near its timeout (builds, tests, servers, installs) so it keeps running while you continue and its output stays in a log, not your context. Use run_in_background true, or bg_timeout below timeout to hand off automatically.",
   "You are notified when a task ends, so never sleep or poll. If you're only waiting on a task, end your turn (the notification wakes you) or call bg_wait.",
   "Check, read, stop and wait for tasks by id (e.g. bg3) with bg_status, bg_output, bg_kill and bg_wait.",
+  "To wait for specific output (a ready message, an error) instead of polling bg_output, call bg_monitor on the task with a grep: matching new lines arrive as notifications.",
 ];
 
 export interface OutputResult {

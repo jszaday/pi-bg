@@ -12,6 +12,7 @@ const EXAMPLES: Record<ToolName, { good: unknown; bad: unknown[] }> = {
   bg_output: { good: { id: "bg3", since: 120, grep: "ERR", context: 2, max_bytes: 4000, stream: "stderr" }, bad: [{}, { id: "bg3", max_bytes: 0 }, { id: "bg3", stream: "both" }] },
   bg_wait: { good: { ids: ["bg1", "bg2"], mode: "all", timeout_s: 600 }, bad: [{ mode: "first" }, { timeout_s: 3601 }, { ids: "bg1" }] },
   bg_write: { good: { id: "bg3", data: "yes\n", eof: true }, bad: [{}, { id: "bg3" }, { data: "x" }, { id: "bg3", data: 1 }, { id: "bg3", data: "x", eof: "y" }] },
+  bg_monitor: { good: { id: "bg3", grep: "ready|ERR", max_notifications: 5, stop: false }, bad: [{}, { grep: "x" }, { id: "bg3", max_notifications: 0 }, { id: "bg3", max_notifications: 101 }, { id: "bg3", stop: "y" }] },
   bg_kill: { good: { id: "bg3", signal: "INT" }, bad: [{ all: "yes" }, { id: 3 }, { id: "bg3", signal: "int" }, { id: "bg3", signal: "STOP" }] },
 };
 

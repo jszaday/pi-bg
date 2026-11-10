@@ -1,4 +1,4 @@
-// TypeBox parameter schemas for the six pi-bg tools (DESIGN section 5). Wire keys are snake_case.
+// TypeBox parameter schemas for the seven pi-bg tools (DESIGN section 5). Wire keys are snake_case.
 // TypeBox comes from the Pi host (peer dependency), so this module is outside src/core.
 
 import { Type, type Static } from "typebox";
@@ -74,9 +74,18 @@ export const BgWriteParams = Type.Object({
   eof: Type.Optional(Type.Boolean({ description: "Close stdin after this write, so the program reads end of input. Default false." })),
 });
 
-export type ToolName = "bash" | "bg_status" | "bg_output" | "bg_wait" | "bg_kill" | "bg_write";
+export const BgMonitorParams = Type.Object({
+  id: Type.String({ description: "Task id such as bg3. The task must still be running." }),
+  grep: Type.Optional(Type.String({ description: "JavaScript regular expression, tested against each new output line. Absent reports every new line." })),
+  max_notifications: Type.Optional(
+    Type.Integer({ minimum: 1, maximum: 100, description: "The monitor stops after this many notifications. Default 10, maximum 100." }),
+  ),
+  stop: Type.Optional(Type.Boolean({ description: "Stop the monitor on this task instead of starting one. Default false." })),
+});
 
-export const TOOL_NAMES: readonly ToolName[] = ["bash", "bg_status", "bg_output", "bg_wait", "bg_kill", "bg_write"];
+export type ToolName = "bash" | "bg_status" | "bg_output" | "bg_wait" | "bg_kill" | "bg_write" | "bg_monitor";
+
+export const TOOL_NAMES: readonly ToolName[] = ["bash", "bg_status", "bg_output", "bg_wait", "bg_kill", "bg_write", "bg_monitor"];
 
 export const SCHEMAS = {
   bash: BashParams,
@@ -85,6 +94,7 @@ export const SCHEMAS = {
   bg_wait: BgWaitParams,
   bg_kill: BgKillParams,
   bg_write: BgWriteParams,
+  bg_monitor: BgMonitorParams,
 } satisfies Record<ToolName, unknown>;
 
 export type BashArgs = Static<typeof BashParams>;
@@ -93,3 +103,4 @@ export type BgOutputArgs = Static<typeof BgOutputParams>;
 export type BgWaitArgs = Static<typeof BgWaitParams>;
 export type BgKillArgs = Static<typeof BgKillParams>;
 export type BgWriteArgs = Static<typeof BgWriteParams>;
+export type BgMonitorArgs = Static<typeof BgMonitorParams>;

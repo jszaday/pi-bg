@@ -1,9 +1,9 @@
-// Response (wire) schemas for the five tools. Only parameter schemas exist in src/tools/schemas.ts, so these are the
+// Response (wire) schemas for the tools. Only parameter schemas exist in src/tools/schemas.ts, so these are the
 // test-side definition of the snake_case result shape; the type-level checks in wire-schemas.test.ts tie them to the
 // Wire* interfaces in src/pi/results.ts, and the round-trip tests tie them to the real producers.
 import { Type, type Static, type TSchema } from "typebox";
 import { Value } from "typebox/value";
-import type { WireHandoff, WireKill, WireOutput, WireStatus, WireWait, WireWrite } from "../../src/pi/results.js";
+import type { WireHandoff, WireKill, WireMonitor, WireOutput, WireStatus, WireWait, WireWrite } from "../../src/pi/results.js";
 import type { ToolName } from "../../src/tools/schemas.js";
 
 const strict = { additionalProperties: false } as const;
@@ -79,6 +79,17 @@ export const WireWriteSchema = Type.Object(
   strict,
 );
 
+export const WireMonitorSchema = Type.Object(
+  {
+    id: Type.String(),
+    monitoring: Type.Boolean(),
+    grep: Type.Optional(Type.String()),
+    max_notifications: Type.Optional(Type.Number()),
+    replaced: Type.Optional(Type.Boolean()),
+  },
+  strict,
+);
+
 export const WireHandoffSchema = Type.Object(
   {
     task_id: Type.String(),
@@ -100,6 +111,7 @@ export const RESPONSE_SCHEMAS = {
   bg_wait: WireWaitSchema,
   bg_kill: WireKillSchema,
   bg_write: WireWriteSchema,
+  bg_monitor: WireMonitorSchema,
 } satisfies Record<ToolName, TSchema>;
 
 // Mutual assignability of schema type and wire interface: fails to compile when either side drifts.
@@ -110,6 +122,7 @@ export const SAME_AS_WIRE = {
   bg_wait: true as Same<Static<typeof WireWaitSchema>, WireWait>,
   bg_kill: true as Same<Static<typeof WireKillSchema>, WireKill>,
   bg_write: true as Same<Static<typeof WireWriteSchema>, WireWrite>,
+  bg_monitor: true as Same<Static<typeof WireMonitorSchema>, WireMonitor>,
   bash: true as Same<Static<typeof WireHandoffSchema>, WireHandoff>,
 } satisfies Record<ToolName, true>;
 

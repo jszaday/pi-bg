@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { NotificationBatch, TaskSummary } from "../../src/contract.js";
-import { notificationText } from "../../src/core/format.js";
-import { registerNotificationRenderer } from "../../src/pi/renderer.js";
-import { NOTIFICATION_TYPE, type NotificationDetails } from "../../src/pi/runtime.js";
+import { monitorText, notificationText } from "../../src/core/format.js";
+import { registerMonitorRenderer, registerNotificationRenderer } from "../../src/pi/renderer.js";
+import { MONITOR_TYPE, NOTIFICATION_TYPE, type MonitorDetails, type NotificationDetails } from "../../src/pi/runtime.js";
 import { FakePi } from "../fakes/index.js";
 
 // Theme stand-in that tags the colour so tests can see which one was chosen.
@@ -68,5 +68,36 @@ describe("notification renderer", () => {
     expect(text({ content: "plain content" })).toContain("plain content");
     expect(text({ content: "plain content", details: { taskIds: [] } })).toContain("plain content");
     expect(text({ content: [{ type: "text", text: "blocks" }], details: { batch: { items: [] } } })).toContain("blocks");
+  });
+});
+
+describe("monitor renderer", () => {
+  const batch = { id: "bg3", lines: ["first", "ready on :8080"], omitted: 0, maxNotifications: 10 };
+  const render = (message: object, expanded = false) => {
+    const pi = new FakePi();
+    registerMonitorRenderer(pi.asExtensionAPI());
+    expect(pi.renderers.has("pi-bg:monitor")).toBe(true);
+    const r = pi.renderers.get(MONITOR_TYPE) as Render;
+    return r({ role: "custom", customType: MONITOR_TYPE, display: true, timestamp: 0, ...message }, { expanded, outputPad: 0 }, theme)!
+      .render(200)
+      .map((l) => l.trimEnd())
+      .join("\n");
+  };
+  const details = (b: MonitorDetails["batch"]): MonitorDetails => ({ batch: b });
+
+  it("collapsed shows the header and the last line only", () => {
+    const out = render({ content: "x", details: details(batch) });
+    expect(out).toBe(" <muted>Monitor bg3: 2 new lines, last: ready on :8080</muted>");
+    expect(out).not.toContain("first");
+  });
+
+  it("expanded shows the full message text", () => {
+    const out = render({ content: "x", details: details({ ...batch, stopped: "task_ended" }) }, true);
+    for (const line of monitorText({ ...batch, stopped: "task_ended" }).split("\n")) expect(out).toContain(line.trimEnd());
+  });
+
+  it("falls back to message content when details are missing or malformed", () => {
+    expect(render({ content: "plain" })).toContain("plain");
+    expect(render({ content: "plain", details: { batch: { lines: [] } } })).toContain("plain");
   });
 });

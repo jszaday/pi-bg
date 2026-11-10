@@ -3,12 +3,13 @@ import { vi, type MockInstance } from "vitest";
 import type { BgConfig, NotifyLevel, ProcessHandle, RunnerCapabilities, Task, TaskId } from "../../src/contract.js";
 import { DEFAULT_CONFIG } from "../../src/core/config.js";
 import { createIdAllocator } from "../../src/core/ids.js";
+import { MonitorPolicy } from "../../src/core/monitor-policy.js";
 import { NotificationPolicy } from "../../src/core/notify-policy.js";
 import { TaskRegistry } from "../../src/core/registry.js";
 import { createTailBuffer } from "../../src/core/tail.js";
 import { WaitCoordinator } from "../../src/core/wait.js";
 import type { Services } from "../../src/pi/runtime.js";
-import { FakeClock, FakeNotificationSink, FakePi, FakeRunner, MemLogStore, type Step } from "../fakes/index.js";
+import { FakeClock, FakeMonitorSink, FakeNotificationSink, FakePi, FakeRunner, MemLogStore, type Step } from "../fakes/index.js";
 
 export interface Harness {
   s: Services;
@@ -16,6 +17,7 @@ export interface Harness {
   runner: FakeRunner;
   logs: MemLogStore;
   sink: FakeNotificationSink;
+  monitorSink: FakeMonitorSink;
   pi: FakePi;
   config: BgConfig;
   ui: { msgs: string[] };
@@ -31,6 +33,7 @@ export function makeHarness(o: { caps?: Partial<RunnerCapabilities>; seed?: numb
   const runner = new FakeRunner(o.caps, clock);
   const logs = new MemLogStore();
   const sink = new FakeNotificationSink();
+  const monitorSink = new FakeMonitorSink();
   const pi = new FakePi();
   const config: BgConfig = structuredClone(DEFAULT_CONFIG);
   const registry = new TaskRegistry({ clock, ids: createIdAllocator(o.seed ?? 0) });
@@ -41,6 +44,7 @@ export function makeHarness(o: { caps?: Partial<RunnerCapabilities>; seed?: numb
     sink,
     summarize: (t) => ({ task: registry.summarize(t), tail: [] }),
   });
+  const monitors = new MonitorPolicy({ clock, config: config.notify, sink: monitorSink });
   const ctx: Services["ctx"] = {};
   const waits = new WaitCoordinator({
     clock,
@@ -48,6 +52,7 @@ export function makeHarness(o: { caps?: Partial<RunnerCapabilities>; seed?: numb
     maxWaitMs: config.wait.maxTimeoutSeconds * 1000,
     confirmQueued: () => ctx.current?.hasPendingMessages?.(),
   });
+  registry.subscribe((t, ev, applied) => monitors.onTaskEvent(t, ev, applied));
   registry.subscribe((t, ev, applied) => notify.onTaskEvent(t, ev, applied));
   registry.subscribe((t, ev, applied) => waits.onTaskEvent(t, ev, applied));
   const ui = { msgs: [] as string[] };
@@ -62,6 +67,7 @@ export function makeHarness(o: { caps?: Partial<RunnerCapabilities>; seed?: numb
     ctx,
     waits,
     notify,
+    monitors,
     ui: { refresh() {}, setFooterFocus() {}, notify: (m) => void ui.msgs.push(m) },
     sessionId: () => "sess",
   };
@@ -88,6 +94,7 @@ export function makeHarness(o: { caps?: Partial<RunnerCapabilities>; seed?: numb
     runner.script(steps);
     const handle = runner.start({ command, cwd: "/", ...(over.stdin && { stdin: true }) }, (chunk, stream) => {
       tail.push(chunk);
+      monitors.onOutput(task.id, chunk);
       if (rt.log) rt.log.write(chunk, stream);
       registry.dispatch(task.id, { type: "output", bytes: chunk.length, at: clock.now() });
     }) as ProcessHandle;
@@ -98,7 +105,7 @@ export function makeHarness(o: { caps?: Partial<RunnerCapabilities>; seed?: numb
   };
 
   const flush = () => new Promise<void>((r) => setImmediate(r));
-  return { s, clock, runner, logs, sink, pi, config, ui, markSaw, start, flush };
+  return { s, clock, runner, logs, sink, monitorSink, pi, config, ui, markSaw, start, flush };
 }
 
 export function ids(list: { id: TaskId }[]): TaskId[] {
