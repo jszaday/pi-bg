@@ -4,8 +4,9 @@ import { isAbsolute, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { BgConfig, NotifyLevel } from "../contract.js";
-import { parseConfig } from "../core/config.js";
+import { DEFAULT_CONFIG, parseConfig } from "../core/config.js";
 import { bgCommandText, failure } from "../core/format.js";
+import { KEY_FORM, normalizeKey } from "./key-id.js";
 import type { Services } from "./runtime.js";
 
 const FILE_NAME = "pi-bg.json";
@@ -56,6 +57,14 @@ export function loadConfig(pi: ExtensionAPI, ctx: ExtensionContext): { config: B
   if (dir !== null && !isAbsolute(dir)) {
     all.push(`pi-bg config: "output.logDir" is ${JSON.stringify(dir)} but must be an absolute path (a relative path would depend on where Pi was started); using the default log directory. Action: set output.logDir to an absolute path such as /var/tmp/pi-bg-logs, or remove it.`);
     parsed.config.output.logDir = null;
+  }
+  // The hint reads config.key, so normalising or falling back here makes it show the key that is actually in effect.
+  const key = normalizeKey(parsed.config.key);
+  if (key === null) {
+    all.push(`pi-bg config: "key" is ${JSON.stringify(parsed.config.key)}, which is not a key id (${KEY_FORM}); using the default key ${DEFAULT_CONFIG.key}. Action: fix "key" in pi-bg.json.`);
+    parsed.config.key = DEFAULT_CONFIG.key;
+  } else {
+    parsed.config.key = key;
   }
   return { config: parsed.config, warnings: all };
 }

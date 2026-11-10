@@ -59,7 +59,7 @@ Ask the agent: "Start the dev server in the background, then check that it came 
 
 ## Keys
 
-The move key is `ctrl+b` by default. It is captured only while a movable `bash` command is running, so cursor-left in the editor works at other times. A hint line with a countdown to the automatic handoff appears beneath the command's "Elapsed" line after a short delay. In tmux, `ctrl+b` is also the tmux prefix, so press it twice to deliver one press to Pi. To use another key, set `key` in `pi-bg.json`. The `keybindings.json` custom action is not supported: Pi accepts the entry but does not resolve it for extensions.
+The move key is `ctrl+b` by default. It is captured only while a movable `bash` command is running, so cursor-left in the editor works at other times. A hint line with a countdown to the automatic handoff appears beneath the command's "Elapsed" line after a short delay. In tmux, `ctrl+b` is also the tmux prefix, so press it twice to deliver one press to Pi. To use another key, set `key` in `pi-bg.json` (modifiers `ctrl`, `shift`, `alt`, `super` joined to one key, such as `ctrl+g`; case and `-` instead of `+` are accepted). A value that is not a key id is reported and the default key is used. The `keybindings.json` custom action is not supported: Pi accepts the entry but does not resolve it for extensions.
 
 ## Configuration
 

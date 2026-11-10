@@ -173,7 +173,7 @@ Keys and defaults:
 | `notify.delivery` | `steer` | `steer`, `followUp`, `nextTurn` |
 | `notify.wake` | true | start a turn when the agent is idle |
 | `notify.batchMs` | 500 | coalescing window; long enough to merge tasks that finish together, short enough to be unnoticed |
-| `key` | `ctrl+b` | move-to-background key id (section 7) |
+| `key` | `ctrl+b` | move-to-background key id (section 7); normalised at load (case, `-` as separator), an invalid id warns and falls back to the default |
 | `hintAfterMs` | 2000 | delay before the hint line shows |
 | `wait.defaultTimeoutSeconds` / `wait.maxTimeoutSeconds` | 120 / 3600 | |
 | `output.tailLines` / `output.maxBytes` | 50 / 16000 | `bg_output` defaults |
@@ -195,7 +195,7 @@ Pi already binds `ctrl+b` to editor cursor-left. pi-bg registers one `ctx.ui.onT
 
 The key is captured from the moment a foreground task starts, not from when the hint appears. The hint line appears after `hintAfterMs` (2 s) to avoid flicker for fast commands. It is drawn in the `bash` tool call itself, on the line beneath Pi's "Elapsed" timer (`renderResult` wrapper in `src/pi/bash-render.ts`), and disappears when the call ends or moves. It reads `moves to background in 28s (ctrl+b to background now)`, counting down once a second to the earliest automatic handoff, or just `ctrl+b to background now` when no handoff is planned. Under tmux or herdr (`TMUX` or `HERDR_ENV` set) the default key shows as `ctrl+b ctrl+b`, because the first press is taken as the multiplexer prefix. This differs from pringled, which captures only once the hint shows, so a press in the first seconds moves the cursor instead; users who press ctrl+b expect it to work, and a fast command that has already ended no longer counts as movable anyway. The trade: while a tool runs, a user editing steering text loses ctrl+b as cursor-left. Reopen trigger: complaints, or S4 finding an editor-text accessor, in which case pass the key through when the editor is non-empty.
 
-The configured key id is matched with Pi's `matchesKey`. Rebinding is the `key` config entry; custom ids in `keybindings.json` are not resolved by Pi (section 2), so reading them is not offered. A later optional read of the raw `getUserBindings()["pi-bg.move"]` when `key` is unset is possible but rests on an undocumented path; reopen if Pi documents extension keybinding ids.
+The configured key id is matched with Pi's `matchesKey`, which never matches an unrecognised id, so config loading normalises the value (`src/pi/key-id.ts`: modifiers `ctrl`, `shift`, `alt`, `super`, case-insensitive, `+` or `-` after a modifier) and on failure warns and uses the default; the hint shows the key in effect. The key grammar is a small copy of pi-tui's, typed against its `KeyId`, and can drift. Rebinding is the `key` config entry; custom ids in `keybindings.json` are not resolved by Pi (section 2), so reading them is not offered. A later optional read of the raw `getUserBindings()["pi-bg.move"]` when `key` is unset is possible but rests on an undocumented path; reopen if Pi documents extension keybinding ids.
 
 In tmux, the default prefix is also `ctrl+b`; the user presses it twice to deliver one to Pi (Claude Code documents the same). Documented; the `key` option exists for people who prefer another binding.
 

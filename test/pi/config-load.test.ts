@@ -64,6 +64,23 @@ describe("loadConfig", () => {
     expect(r.warnings).toEqual([]);
   });
 
+  it("normalises a loosely written key (case, separator) without a warning", () => {
+    writeGlobal({ key: "Ctrl-G" });
+    const r = loadConfig(new FakePi().asExtensionAPI(), ctx(() => true));
+    expect(r.config.key).toBe("ctrl+g");
+    expect(r.warnings).toEqual([]);
+  });
+
+  it.each(["ctrl+bb", "ctrl+nope", "meta+b", "ctrl+"])("warns for key %j with the value and the accepted form, and falls back to the default key", (bad) => {
+    writeGlobal({ key: bad });
+    const r = loadConfig(new FakePi().asExtensionAPI(), ctx(() => true));
+    expect(r.config.key).toBe(DEFAULT_CONFIG.key);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain(JSON.stringify(bad));
+    expect(r.warnings[0]).toContain("ctrl+b");
+    expect(r.warnings[0]).toContain("Action");
+  });
+
   it("merges global, trusted project and flags in precedence order", () => {
     writeGlobal({ bgTimeoutSeconds: 10, key: "ctrl+g" });
     writeProject({ bgTimeoutSeconds: 20 });
