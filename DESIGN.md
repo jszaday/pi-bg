@@ -180,7 +180,7 @@ Keys and defaults:
 | `output.ringBytes` | 65536 | in-memory recent output per task |
 | `output.maxLogBytes` | 268435456 | per-task log cap; see section 10 |
 | `output.logRetentionDays` | 7 | log directory garbage collection |
-| `output.logDir` | null | null means the session directory under `os.tmpdir()` |
+| `output.logDir` | null | null means the session directory under `os.tmpdir()`; otherwise an absolute path (a relative path is rejected with a warning and the default is used, because it would depend on where Pi was started) |
 | `enabled` | true | false (set by `--no-bg`) makes pi-bg's `bash` a pass-through to the native tool and the `bg_*` tools answer inactive |
 | `maxRunningTasks` | 16 | concurrent background tasks; a safety bound against runaway loops, not a tuned value |
 | `kill.termGraceMs` | 3000 | SIGTERM to SIGKILL delay |
@@ -272,7 +272,7 @@ In memory, each task keeps a bounded ring of recent output (`output.ringBytes`) 
 
 Caps: `output.maxLogBytes` stops writing to the log (a marker line is appended) and the ring keeps updating; the task is not killed. Claude Code kills at 5 GB; killing is destructive and the user did not ask for it, while a runaway producer cannot fill the disk because writing stops. Reopen if a runaway still hurts (CPU or pipe backpressure). A log write failure (disk full, permissions) switches the task to ring-only, marks it `log_degraded`, and is surfaced in the next result.
 
-Retention: logs of finished tasks outlive the session (users inspect them after quitting). `session_start` deletes session directories older than `output.logRetentionDays` and not owned by a live Pi process (an `owner.pid` file, pi-bg-bash's scheme). Memory per task is bounded by the ring; the number of tracked tasks is bounded by `maxRunningTasks` for running ones and by session length for finished (summaries only).
+Retention: logs of finished tasks outlive the session (users inspect them after quitting). `session_start` deletes session directories older than `output.logRetentionDays` and not owned by a live Pi process (an `owner.pid` file, pi-bg-bash's scheme). Only directories that contain an `owner.pid` holding a pid are candidates, so unrelated directories in a shared `output.logDir` are never deleted; a directory without that file is left alone. Memory per task is bounded by the ring; the number of tracked tasks is bounded by `maxRunningTasks` for running ones and by session length for finished (summaries only).
 
 ## 11. bg_timeout (R6)
 

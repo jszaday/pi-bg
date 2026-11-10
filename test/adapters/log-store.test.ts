@@ -153,8 +153,22 @@ describe("fs log store", () => {
       const live = mk(base, "live", process.ppid, 10 * 864e5);
       const young = mk(base, "young", 2 ** 22 + 12345, 1000);
       const r = await s.gc(7 * 864e5);
-      expect(r.removed.sort()).toEqual([dead, noOwner].sort());
+      expect(r.removed).toEqual([dead]);
       for (const keep of [live, young, join(base, "mine")]) expect(fs.existsSync(keep)).toBe(true);
+    });
+    it("never removes old directories without pi-bg evidence (no owner.pid, or an owner.pid that is not a pid)", async () => {
+      const base = tmp();
+      const s = createFsLogStore({ baseDir: base, sessionId: "mine", maxLogBytes: 1e6 });
+      const unrelated = mk(base, "photos", null, 10 * 864e5);
+      const emptyDir = join(base, "empty");
+      fs.mkdirSync(emptyDir);
+      fs.utimesSync(emptyDir, new Date(0), new Date(0));
+      const junk = mk(base, "junk", null, 10 * 864e5);
+      fs.writeFileSync(join(junk, "owner.pid"), "not a pid");
+      aged(junk, 10 * 864e5);
+      const ours = mk(base, "ours", 2 ** 22 + 12345, 10 * 864e5); // positive control: evidence present, owner dead
+      expect((await s.gc(7 * 864e5)).removed).toEqual([ours]);
+      for (const keep of [unrelated, emptyDir, junk]) expect(fs.existsSync(keep)).toBe(true);
     });
     it("a missing base directory is not an error", async () => {
       const s = createFsLogStore({ baseDir: join(tmp(), "nope"), sessionId: "s", maxLogBytes: 1 });

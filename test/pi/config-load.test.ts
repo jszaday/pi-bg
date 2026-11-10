@@ -47,6 +47,23 @@ describe("loadConfig", () => {
     expect(r.warnings).toEqual([]);
   });
 
+  it("rejects a relative output.logDir with a warning naming the value and the action, and uses the default", () => {
+    writeGlobal({ output: { logDir: "logs/pi-bg" } });
+    const r = loadConfig(new FakePi().asExtensionAPI(), ctx(() => true));
+    expect(r.config.output.logDir).toBeNull();
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain('"logs/pi-bg"');
+    expect(r.warnings[0]).toContain("absolute");
+    expect(r.warnings[0]).toContain("Action");
+  });
+
+  it("keeps an absolute output.logDir without a warning (negative control)", () => {
+    writeGlobal({ output: { logDir: join(root, "logs") } });
+    const r = loadConfig(new FakePi().asExtensionAPI(), ctx(() => true));
+    expect(r.config.output.logDir).toBe(join(root, "logs"));
+    expect(r.warnings).toEqual([]);
+  });
+
   it("merges global, trusted project and flags in precedence order", () => {
     writeGlobal({ bgTimeoutSeconds: 10, key: "ctrl+g" });
     writeProject({ bgTimeoutSeconds: 20 });

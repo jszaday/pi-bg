@@ -148,10 +148,14 @@ export function createFsLogStore(opts: { baseDir: string; sessionId: string; max
           let newest = nodeFs.statSync(dir).mtimeMs;
           for (const f of nodeFs.readdirSync(dir)) newest = Math.max(newest, nodeFs.statSync(join(dir, f)).mtimeMs);
           if (newest >= cutoff) continue;
-          let owner: number | undefined;
-          try { owner = Number(nodeFs.readFileSync(join(dir, "owner.pid"), "utf8").trim()); } catch { /* no owner file */ }
-          if (owner && Number.isInteger(owner) && owner !== process.pid && pidAlive(owner)) continue;
+          // Only directories pi-bg created carry an owner.pid holding a pid (written by every version since v0.1.0); anything else in a shared logDir is not ours to delete.
+          let ownerText: string;
+          try { ownerText = nodeFs.readFileSync(join(dir, "owner.pid"), "utf8").trim(); } catch { continue; }
+          if (!/^\d+$/.test(ownerText)) continue;
+          const owner = Number(ownerText);
           if (owner === process.pid) continue;
+          if (!(owner > 0 && Number.isSafeInteger(owner))) continue;
+          if (pidAlive(owner)) continue;
           nodeFs.rmSync(dir, { recursive: true, force: true });
           removed.push(dir);
         } catch { /* skip entries we cannot inspect */ }

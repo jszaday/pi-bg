@@ -1,6 +1,6 @@
 // Config loading glue (DESIGN section 6): reads the files and flags, applies the trust rule, delegates merging and validation to core parseConfig.
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { BgConfig, NotifyLevel } from "../contract.js";
@@ -50,7 +50,14 @@ export function loadConfig(pi: ExtensionAPI, ctx: ExtensionContext): { config: B
     if (v !== undefined) flags[name] = v;
   }
   const parsed = parseConfig({ global, project, flags });
-  return { config: parsed.config, warnings: [...warnings, ...parsed.warnings] };
+  const all = [...warnings, ...parsed.warnings];
+  // A relative logDir would resolve against whichever directory Pi was started in, so cleanup could run on a different directory each session.
+  const dir = parsed.config.output.logDir;
+  if (dir !== null && !isAbsolute(dir)) {
+    all.push(`pi-bg config: "output.logDir" is ${JSON.stringify(dir)} but must be an absolute path (a relative path would depend on where Pi was started); using the default log directory. Action: set output.logDir to an absolute path such as /var/tmp/pi-bg-logs, or remove it.`);
+    parsed.config.output.logDir = null;
+  }
+  return { config: parsed.config, warnings: all };
 }
 
 const LEVELS: readonly NotifyLevel[] = ["off", "error", "done"];
