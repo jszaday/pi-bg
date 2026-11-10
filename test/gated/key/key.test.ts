@@ -79,7 +79,6 @@ async function launch(command: string, extra: Record<string, unknown> = {}) {
 }
 
 describe.skipIf(!!skip)("live move key (real pi CLI in tmux, real pi-bg)", () => {
-  // TODO(#15): gated tmux test for the shells panel (footer Down focus, Enter opens, x kills) — not written; tmux was unavailable on the build machine
   it("ctrl+b while a sleep 30 tool runs moves it to the background; the agent continues", async () => {
     const { tmux, screen } = await launch("sleep 3137; echo finished");
     tmux("send-keys", "-t", "k", "-l", "go");
@@ -120,4 +119,25 @@ describe.skipIf(!!skip)("live move key (real pi CLI in tmux, real pi-bg)", () =>
     await until(() => /stub: all done/.test(screen()), 15_000, "the turn to finish after the move");
     expect(screen()).toMatch(/1 shell/);
   }, 60_000);
+
+  it("Down from the empty editor focuses the footer, Enter opens the shells panel, x kills the selected shell, Esc closes it", async () => {
+    const { tmux, screen } = await launch("sleep 3137; echo finished");
+    tmux("send-keys", "-t", "k", "-l", "go");
+    await sleep(300);
+    tmux("send-keys", "-t", "k", "Enter");
+    await until(() => /sleep 3137/.test(screen()), 20_000, "the bash tool call to appear");
+    await sleep(1500);
+    tmux("send-keys", "-t", "k", "C-b");
+    await until(() => /stub: all done/.test(screen()) && /1 shell/.test(screen()), 15_000, "the move to the background to finish");
+    expect(screen()).not.toMatch(/x kill/); // the panel is not open yet
+    tmux("send-keys", "-t", "k", "Down");
+    await sleep(500);
+    tmux("send-keys", "-t", "k", "Enter");
+    await until(() => /x kill/.test(screen()), 10_000, "the shells panel to open");
+    expect(screen()).toMatch(/bg1\s+background/);
+    tmux("send-keys", "-t", "k", "-l", "x");
+    await until(() => /bg1\s+killed/.test(screen()), 15_000, "the selected shell to be killed");
+    tmux("send-keys", "-t", "k", "Escape");
+    await until(() => !/x kill/.test(screen()), 10_000, "the panel to close");
+  }, 90_000);
 });
