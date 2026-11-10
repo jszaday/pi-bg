@@ -122,6 +122,11 @@ export default function piBg(pi: ExtensionAPI): void {
     clock,
     kill: (id) => killTasks(s, [id], "command"),
     tailOf,
+    released: (id) => runtime.get(id)?.evicted === true,
+    releasedTail: async (id, n) => {
+      const t = registry.get(id);
+      return t ? commandTail(s, t, n) : [];
+    },
     setFooterFocus: (f) => ui.setFooterFocus(f),
   });
 
