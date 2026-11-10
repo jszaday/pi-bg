@@ -79,6 +79,13 @@ describe("bg_* producers satisfy the response schemas", () => {
     expect(checkResult("bg_kill", await p)).toEqual({ ok: true, why: "" });
     expect(checkResult("bg_kill", await h.pi.callTool("bg_kill", { id: "bg1" })).ok).toBe(true);
   });
+  it("bg_write: write and eof", async () => {
+    const h = setup();
+    h.start("repl", [], { stdin: true });
+    for (const p of [{ id: "bg1", data: "hi\n" }, { id: "bg1", data: "", eof: true }]) {
+      expect(checkResult("bg_write", await h.pi.callTool("bg_write", p)), JSON.stringify(p)).toEqual({ ok: true, why: "" });
+    }
+  });
   it("every bg_* tool is covered above and has a response schema", () => {
     const h = setup();
     const registered = [...h.pi.tools.keys()].sort();
@@ -147,6 +154,7 @@ describe("negative control: the checker rejects wrong shapes", () => {
     ["bg_output", { id: "bg1", state: "exited", output: "", returnedBytes: 0, total_bytes: 0, next_cursor: 0, truncated: false, stream: "combined", log_degraded: false }],
     ["bg_wait", { reason: "finished", waitedS: 1, tasks: [] }],
     ["bg_kill", { killed: [], alreadyFinished: [], failed: [] }],
+    ["bg_write", { id: "bg1", writtenBytes: 1, eof: false }],
     ["bash", { task_id: "bg1", state: "running", reason: "bg_timeout", runtime_s: 1, output_tail: [], log_degraded: false }],
     ["bg_status", { tasks: [{ id: "bg1", extra: 1 }] }],
     ["bg_status", undefined],

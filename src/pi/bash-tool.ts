@@ -18,7 +18,7 @@ const SENTINEL_PREFIX = "pi-bg-handoff:";
 const HANDOFF_TAIL_LINES = 20;
 
 const BG_DESCRIPTION =
-  " pi-bg additions: set run_in_background to start a command in the background at once, bg_timeout (seconds) to move a slow foreground command to the background without killing it, notify (off, error, done) and description (task label).";
+  " pi-bg additions: set run_in_background to start a command in the background at once, bg_timeout (seconds) to move a slow foreground command to the background without killing it, notify (off, error, done), description (task label) and stdin (true gives the command a writable stdin for bg_write).";
 
 /** One in-flight foreground call: what the handoff needs to unblock the pending native `execute`. */
 interface Foreground {
@@ -107,6 +107,7 @@ export function registerBashTool(
       }),
       notify: effectiveNotifyLevel({ call: p.notify, session: s.overrides.notifyLevel, config: s.config().notify.default }),
       startInBackground: p.run_in_background === true,
+      ...(p.stdin === true && { stdin: true }),
       toolCallId,
     };
   }
@@ -203,7 +204,7 @@ export function registerBashTool(
       const inactiveText = s.inactiveReason?.();
       if (!s.config().enabled || inactiveText) {
         // Pass-through: Pi's own bash with its default operations. A call that needs pi-bg (background, bg_timeout, notify) must not silently run in the foreground.
-        if (params.run_in_background === true || params.bg_timeout !== undefined || params.notify !== undefined) {
+        if (params.run_in_background === true || params.bg_timeout !== undefined || params.notify !== undefined || params.stdin !== undefined) {
           const message = inactiveText ?? failure("disabled", { foreground: 1 });
           s.ui.notify(message, "error");
           throw new Error(message);

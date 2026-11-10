@@ -1,6 +1,6 @@
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { HandoffReason, NotifyLevel, StreamName, Task, TaskState, TaskSummary, WaitReason, WaitResult } from "../contract.js";
-import { type KillResult, type StatusPage, type OutputResult, handoffText, killText, outputText, summaryText, waitText } from "../core/format.js";
+import { type KillResult, type StatusPage, type OutputResult, handoffText, killText, outputText, summaryText, waitText, writeText } from "../core/format.js";
 import type { ToolName } from "../tools/schemas.js";
 
 // camelCase internal -> snake_case wire (DESIGN section 5); text comes from src/core/format.ts only.
@@ -54,6 +54,11 @@ export interface WireKill {
   killed: string[];
   already_finished: string[];
   failed: { id: string; error: string }[];
+}
+export interface WireWrite {
+  id: string;
+  written_bytes: number;
+  eof: boolean;
 }
 export interface WireHandoff {
   task_id: string;
@@ -168,6 +173,11 @@ export function toKillResult(r: KillResult): AgentToolResult<Record<string, unkn
   return make(killText(r), wire);
 }
 
+export function toWriteResult(r: { id: string; bytes: number; eof: boolean }): AgentToolResult<Record<string, unknown>> {
+  const wire: WireWrite = { id: r.id, written_bytes: r.bytes, eof: r.eof };
+  return make(writeText(r), wire);
+}
+
 /** One entry per tool name; the W8 parity test compares its keys with SCHEMAS and the registered tools. */
 export const RESULT_MAPPERS: Record<ToolName, (...a: never[]) => unknown> = {
   bash: toBashHandoffResult,
@@ -175,4 +185,5 @@ export const RESULT_MAPPERS: Record<ToolName, (...a: never[]) => unknown> = {
   bg_output: toOutputResult,
   bg_wait: toWaitResult,
   bg_kill: toKillResult,
+  bg_write: toWriteResult,
 };

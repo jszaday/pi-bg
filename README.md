@@ -43,7 +43,7 @@ Ask the agent: "Start the dev server in the background, then check that it came 
 
 ## Tools
 
-`bash` replaces the built-in `bash` tool and adds four parameters: `bg_timeout` (seconds the call may run in the foreground before it is moved to the background; `0` disables this for the call), `run_in_background` (start the command as a background task at once), `notify` (`off`, `error` or `done` for this task) and `description` (a short label shown in task lists). A call that is moved to the background returns a normal result with the task id; the command is not killed.
+`bash` replaces the built-in `bash` tool and adds five parameters: `bg_timeout` (seconds the call may run in the foreground before it is moved to the background; `0` disables this for the call), `run_in_background` (start the command as a background task at once), `notify` (`off`, `error` or `done` for this task) `description` (a short label shown in task lists) and `stdin` (give the command a writable stdin for `bg_write`; default off, so a program that reads stdin sees end of input). A call that is moved to the background returns a normal result with the task id; the command is not killed.
 
 `bg_status` lists background tasks, or shows one task with the last lines of its output. It reports state, runtime, exit code and whether the task's notification has been delivered. A list shows running tasks first, most recent first, 10 per page (`limit`, `offset`); finished tasks are hidden unless `include_finished` is true.
 
@@ -52,6 +52,8 @@ Ask the agent: "Start the dev server in the background, then check that it came 
 `bg_wait` blocks until a task ends (or until any or all of a set of tasks end) or until a timeout passes. The wait is interruptible: a user message, or Esc, returns control to the agent.
 
 `bg_kill` stops one task by id, or all tasks. It sends SIGTERM to the task's process group and sends SIGKILL if the group is still alive after a short grace period. The optional `signal` (`INT`, `HUP`, `TERM`, `QUIT`, `USR1`, `USR2` or `KILL`) replaces the first signal; `KILL` skips the grace period. The fallback runner accepts only `KILL`.
+
+`bg_write` writes text to the stdin of a running task that was started with `stdin` true, and with `eof` closes stdin so the program sees end of input. One call carries at most 64 KiB. A task started without stdin, or one that has ended, is rejected with an explanation. The fallback runner does not support `stdin`.
 
 ## Commands
 

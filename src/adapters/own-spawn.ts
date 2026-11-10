@@ -58,7 +58,7 @@ export function createOwnSpawnRunner(opts: OwnSpawnOptions): ProcessRunner & { r
         cwd: spec.cwd,
         detached: true, // own session and process group: group signals reach grandchildren
         env: spec.env ?? opts.env(),
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: [spec.stdin ? "pipe" : "ignore", "pipe", "pipe"],
       });
       let resolveExit!: (e: ExitInfo) => void;
       const exited = new Promise<ExitInfo>((r) => (resolveExit = r));
@@ -67,6 +67,7 @@ export function createOwnSpawnRunner(opts: OwnSpawnOptions): ProcessRunner & { r
       let graceTimer: NodeJS.Timeout | undefined;
       let killTimer: NodeJS.Timeout | undefined;
       let ended = 0;
+      let stdinClosed = false;
       let groupGone = false;
       let groupPoll: NodeJS.Timeout | undefined;
       const markGone = () => {
@@ -79,6 +80,7 @@ export function createOwnSpawnRunner(opts: OwnSpawnOptions): ProcessRunner & { r
         if (settled) return;
         settled = true;
         if (graceTimer) clearTimeout(graceTimer);
+        child.stdin?.destroy();
         child.stdout?.destroy();
         child.stderr?.destroy();
         resolveExit(info);
@@ -87,6 +89,7 @@ export function createOwnSpawnRunner(opts: OwnSpawnOptions): ProcessRunner & { r
         ended++;
         if (leaderExited && ended >= 2) finish();
       };
+      child.stdin?.on("error", () => { /* EPIPE: the program closed stdin or exited; the next write reports it, the exit settles the task */ });
       child.stdout!.on("data", (b: Buffer) => sink(b, "stdout"));
       child.stderr!.on("data", (b: Buffer) => sink(b, "stderr"));
       child.stdout!.once("end", onEnd);
@@ -116,6 +119,19 @@ export function createOwnSpawnRunner(opts: OwnSpawnOptions): ProcessRunner & { r
       return {
         pid,
         exited,
+        ...(child.stdin && {
+          writeStdin(data: Uint8Array, eof: boolean) {
+            const stdin = child.stdin!;
+            if (stdinClosed) return { error: "stdin was already closed by an earlier write with eof true" };
+            if (!stdin.writable) return { error: "the program closed its stdin or has exited" };
+            if (data.byteLength > 0) stdin.write(data);
+            if (eof) {
+              stdinClosed = true;
+              stdin.end();
+            }
+            return undefined;
+          },
+        }),
         kill(signal) {
           // Never signal a group seen empty (its id could be reused). Stragglers after the leader exited are still ours to kill.
           if (groupGone || (leaderExited && !groupAlive(pid))) { markGone(); return; }

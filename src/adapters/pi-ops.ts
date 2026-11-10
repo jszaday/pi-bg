@@ -3,7 +3,7 @@ import type { BashOperations } from "@earendil-works/pi-coding-agent";
 import type { ExitInfo, OutputSink, ProcessHandle, ProcessRunner, RunSpec } from "../contract.js";
 
 /**
- * Alternative runner over Pi's native operations. Limits: no pid, merged streams, kill is an abort (Pi SIGKILLs the tree, no grace).
+ * Alternative runner over Pi's native operations. Limits: no pid, merged streams, no stdin, kill is an abort (Pi SIGKILLs the tree, no grace).
  * `RunSpec.command` must already carry the command prefix (Pi's tool applies it before exec).
  */
 export function createPiOpsRunner(ops: { exec: BashOperations["exec"] }): ProcessRunner {
@@ -15,6 +15,7 @@ export function createPiOpsRunner(ops: { exec: BashOperations["exec"] }): Proces
       } catch {
         return { startError: `Working directory does not exist: ${spec.cwd}\nCannot execute bash commands. Run the command from an existing directory.` };
       }
+      if (spec.stdin) return { startError: "Stdin is not supported by the fallback runner (Pi's native operations). Action: run the command without stdin, or restore the own-spawn runner (a startup warning says why it is not in use)." };
       const ac = new AbortController();
       const exited: Promise<ExitInfo> = (async () => {
         try {

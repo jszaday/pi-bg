@@ -80,7 +80,7 @@ export function startTask(s: Services, spec: TaskSpec, opts: StartOptions = {}):
   try {
     const runner = s.runner();
     shell = (runner as { shell?: string }).shell ?? shell;
-    started = runner.start({ command: opts.runCommand ?? spec.command, cwd: spec.cwd, env: opts.env }, sink);
+    started = runner.start({ command: opts.runCommand ?? spec.command, cwd: spec.cwd, env: opts.env, ...(spec.stdin && { stdin: true }) }, sink);
   } catch (e) {
     started = { startError: e instanceof Error ? e.message : String(e) };
   }

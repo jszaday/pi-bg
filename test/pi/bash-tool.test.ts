@@ -110,6 +110,16 @@ describe("bash tool: handoff", () => {
     expect(env.runner.started).toHaveLength(1);
   });
 
+  it("stdin true reaches the runner and the task spec; absent leaves stdin closed", async () => {
+    const { env, call } = setup();
+    await call({ command: "repl", run_in_background: true, stdin: true }, { id: "c1" });
+    await call({ command: "plain", run_in_background: true }, { id: "c2" });
+    expect(env.runner.started[0]).toMatchObject({ command: "repl", stdin: true });
+    expect(state(env, "bg1").spec.stdin).toBe(true);
+    expect("stdin" in env.runner.started[1]!).toBe(false);
+    expect(state(env, "bg2").spec.stdin).toBeUndefined();
+  });
+
   it("handoffAllMovable moves two parallel foreground calls and ignores terminal tasks", async () => {
     const { env, call, ctl } = setup();
     env.runner.script([{ at: 5, exit: EXIT0 }]); // bg1 ends on its own
@@ -284,6 +294,7 @@ describe("bash tool: pass-through", () => {
     ["run_in_background", { run_in_background: true }],
     ["bg_timeout", { bg_timeout: 1 }],
     ["notify", { notify: "done" }],
+    ["stdin", { stdin: true }],
   ])("enabled=false rejects %s with the inactive text instead of running in the foreground", async (_n, extra) => {
     const { env, call } = setup({ config: { enabled: false } });
     await expect(call({ command: "echo should-not-run", ...extra })).rejects.toThrow(/pi-bg is inactive.*Action:/);

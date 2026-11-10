@@ -7,10 +7,11 @@ import { SCHEMAS, type ToolName } from "../../src/tools/schemas.js";
 import { makeHarness } from "../pi/w6a-services.js";
 
 const EXAMPLES: Record<ToolName, { good: unknown; bad: unknown[] }> = {
-  bash: { good: { command: "npm test", timeout: 300, bg_timeout: 30, notify: "error", description: "tests" }, bad: [{}, { command: "" }, { command: "x", notify: "all" }, { command: "x", bg_timeout: -1 }] },
+  bash: { good: { command: "npm test", timeout: 300, bg_timeout: 30, notify: "error", description: "tests", stdin: true }, bad: [{}, { command: "" }, { command: "x", notify: "all" }, { command: "x", bg_timeout: -1 }, { command: "x", stdin: "yes" }] },
   bg_status: { good: { id: "bg3", tail_lines: 10, include_finished: false }, bad: [{ tail_lines: -1 }, { id: 3 }, { includeFinished: true, include_finished: "y" }] },
   bg_output: { good: { id: "bg3", since: 120, grep: "ERR", context: 2, max_bytes: 4000, stream: "stderr" }, bad: [{}, { id: "bg3", max_bytes: 0 }, { id: "bg3", stream: "both" }] },
   bg_wait: { good: { ids: ["bg1", "bg2"], mode: "all", timeout_s: 600 }, bad: [{ mode: "first" }, { timeout_s: 3601 }, { ids: "bg1" }] },
+  bg_write: { good: { id: "bg3", data: "yes\n", eof: true }, bad: [{}, { id: "bg3" }, { data: "x" }, { id: "bg3", data: 1 }, { id: "bg3", data: "x", eof: "y" }] },
   bg_kill: { good: { id: "bg3", signal: "INT" }, bad: [{ all: "yes" }, { id: 3 }, { id: "bg3", signal: "int" }, { id: "bg3", signal: "STOP" }] },
 };
 
