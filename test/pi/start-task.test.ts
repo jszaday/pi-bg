@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TaskSpec } from "../../src/contract.js";
+import { MAX_FINISHED_RUNTIME } from "../../src/pi/runtime.js";
 import { startTask } from "../../src/pi/start-task.js";
 import { w6bEnv, w6bFlush } from "./w6b-helpers.js";
 
@@ -148,5 +149,54 @@ describe("startTask", () => {
     startTask(e.s, spec({ command: "ls" }), { runCommand: "pre\nls", env: { A: "1" } });
     expect(e.runner.started[0]).toMatchObject({ command: "pre\nls", env: { A: "1" }, cwd: "/tmp" });
     expect(e.s.registry.get("bg1")!.spec.command).toBe("ls");
+  });
+});
+
+describe("startTask: eviction of finished runtime entries (#12)", () => {
+  /** Starts `n` tasks one after another, each printing a line and exiting. */
+  async function runFinished(e: ReturnType<typeof w6bEnv>, n: number): Promise<void> {
+    for (let i = 1; i <= n; i++) {
+      e.runner.script([{ at: 0, chunk: `out${i}\n`, exit: { code: 0, signal: null } }]);
+      expect(startTask(e.s, spec()).ok).toBe(true);
+      await w6bFlush();
+    }
+  }
+
+  it("keeps exactly the newest 50 finished entries with their ring: nothing is evicted at 50", async () => {
+    const e = w6bEnv();
+    await runFinished(e, MAX_FINISHED_RUNTIME);
+    expect([...e.s.runtime.values()].filter((rt) => rt.evicted)).toHaveLength(0);
+    expect(e.s.runtime.get("bg1")!.tail.lines(5)).toEqual(["out1"]);
+  });
+
+  it("evicts the oldest at 51, releasing its ring but keeping its handle and registry entry", async () => {
+    const e = w6bEnv();
+    await runFinished(e, MAX_FINISHED_RUNTIME + 1);
+    const evicted = [...e.s.runtime].filter(([, rt]) => rt.evicted).map(([id]) => id);
+    expect(evicted).toEqual(["bg1"]);
+    expect(e.s.runtime.get("bg1")!.tail.lines(5)).toEqual([]);
+    expect(e.s.runtime.get("bg1")!.handle).toBeDefined(); // shutdown still signals a job left in the group (#18)
+    expect(e.s.runtime.get("bg1")!.log).toBeUndefined();
+    expect(e.s.runtime.get("bg2")!.tail.lines(5)).toEqual(["out2"]);
+    expect(e.s.registry.get("bg1")!.state).toBe("exited");
+    expect(e.logs.contents("bg1")).toBe("out1\n"); // the log is untouched
+  });
+
+  it("never evicts a running task, however many tasks have finished", async () => {
+    const e = w6bEnv();
+    e.runner.script([{ at: 0, chunk: "live\n" }]);
+    startTask(e.s, spec());
+    await runFinished(e, MAX_FINISHED_RUNTIME + 5);
+    expect(e.s.runtime.get("bg1")!.evicted).toBeUndefined();
+    expect(e.s.runtime.get("bg1")!.tail.lines(5)).toEqual(["live"]);
+    expect([...e.s.runtime.values()].filter((rt) => rt.evicted)).toHaveLength(5);
+  });
+
+  it("keeps the ring of a finished task whose log is unavailable (it is the only copy)", async () => {
+    const e = w6bEnv();
+    e.logs.open = () => ({ error: "ENOSPC" });
+    await runFinished(e, MAX_FINISHED_RUNTIME + 2);
+    expect([...e.s.runtime.values()].filter((rt) => rt.evicted)).toHaveLength(0);
+    expect(e.s.runtime.get("bg1")!.tail.lines(5)).toEqual(["out1"]);
   });
 });

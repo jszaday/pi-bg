@@ -13,6 +13,8 @@ import type {
   TimerHandle,
   UiSink,
 } from "../contract.js";
+import { createTailBuffer } from "../core/tail.js";
+import { isTerminal } from "../core/task.js";
 import type { NotificationPolicy } from "../core/notify-policy.js";
 import type { TaskRegistry } from "../core/registry.js";
 import type { WaitCoordinator } from "../core/wait.js";
@@ -23,6 +25,30 @@ export interface TaskRuntime {
   log?: LogWriter;
   tail: TailBuffer;
   timers: TimerHandle[];
+  /** Set by evictFinished: the output ring was released; readers answer from the log instead. The handle stays (shutdown still signals a job left in the group). */
+  evicted?: true;
+}
+
+/** How many finished tasks keep their output ring in memory; older ones are evicted and read from the log (DESIGN section 12). */
+export const MAX_FINISHED_RUNTIME = 50;
+
+/**
+ * Releases the output ring of the oldest finished tasks beyond `keep` (by end time). Only tasks whose log is complete and readable
+ * are evicted: with no log or a degraded one the ring is the only copy of the output. The registry entry and the handle are kept.
+ */
+export function evictFinished(s: Services, keep = MAX_FINISHED_RUNTIME): void {
+  const held: { rt: TaskRuntime; endedAt: number }[] = [];
+  for (const [id, rt] of s.runtime) {
+    const t = s.registry.get(id);
+    if (!t || rt.evicted || !isTerminal(t) || t.logPath === undefined || t.logDegraded) continue;
+    held.push({ rt, endedAt: t.endedAt ?? 0 });
+  }
+  held.sort((a, b) => a.endedAt - b.endedAt); // stable: ties keep start order
+  for (const { rt } of held.slice(0, Math.max(0, held.length - keep))) {
+    rt.tail = createTailBuffer(1);
+    rt.log = undefined;
+    rt.evicted = true;
+  }
 }
 
 /** Everything the Pi glue shares. Built once by the composition root (W8); tools receive it by closure. */

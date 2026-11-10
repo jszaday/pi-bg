@@ -7,7 +7,7 @@ import { failure } from "../core/format.js";
 import { createTailBuffer } from "../core/tail.js";
 import { isTerminal } from "../core/task.js";
 import { planTimers } from "../core/timeout-policy.js";
-import type { Services, TaskRuntime } from "./runtime.js";
+import { evictFinished, type Services, type TaskRuntime } from "./runtime.js";
 
 /** Callbacks of the caller that holds the task (the foreground exec). All optional. */
 export interface StartHooks {
@@ -135,6 +135,7 @@ export function startTask(s: Services, spec: TaskSpec, opts: StartOptions = {}):
     } catch {
       /* a failed close leaves the log as written; nothing to do */
     }
+    evictFinished(s);
     hooks.onExit?.(info);
   });
 
