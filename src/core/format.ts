@@ -84,7 +84,7 @@ function v(ctx: Record<string, string | number>, key: string): string {
   return value === undefined ? UNKNOWN : String(value);
 }
 
-function formatRuntime(seconds: number): string {
+export function formatRuntime(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);

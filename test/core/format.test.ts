@@ -4,6 +4,7 @@ import {
   bgCommandText,
   failure,
   footerText,
+  formatRuntime,
   handoffText,
   killText,
   notificationText,
@@ -13,6 +14,22 @@ import {
   type FailureCode,
 } from "../../src/core/format.js";
 import type { Task, TaskSummary } from "../../src/contract.js";
+
+describe("formatRuntime", () => {
+  it("renders seconds, minutes and hours at their boundaries", () => {
+    expect(formatRuntime(0)).toBe("0s");
+    expect(formatRuntime(59)).toBe("59s");
+    expect(formatRuntime(60)).toBe("1m 00s");
+    expect(formatRuntime(3599)).toBe("59m 59s");
+    expect(formatRuntime(3600)).toBe("1h 00m");
+    expect(formatRuntime(3661)).toBe("1h 01m");
+  });
+
+  it("floors fractions and clamps negatives to zero", () => {
+    expect(formatRuntime(59.9)).toBe("59s");
+    expect(formatRuntime(-5)).toBe("0s");
+  });
+});
 
 function summary(n: number, over: Partial<TaskSummary> = {}): TaskSummary {
   return {
