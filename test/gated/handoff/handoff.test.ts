@@ -26,7 +26,7 @@ describe.skipIf(!!skip)("live handoff (real pi-bg in a real AgentSession)", () =
     expect(running).toMatch(/bg1/);
     expect(running).toMatch(/background/);
     await sleep(1800);
-    const done = (await liveStatus(live, "s2")).text;
+    const done = (await liveStatus(live, "s2", { include_finished: true })).text;
     expect(done).toMatch(/bg1\s+exited\s+\S+\s+0/);
     expect(done).not.toMatch(/background/);
   }, 30_000);
@@ -62,7 +62,7 @@ describe.skipIf(!!skip)("live handoff (real pi-bg in a real AgentSession)", () =
     expect(r?.isError).toBe(true);
     expect(r?.text).toMatch(/Command aborted/);
     await sleep(500); // the exit event follows the kill by the idle grace
-    const st = (await liveStatus(live, "s3")).text;
+    const st = (await liveStatus(live, "s3", { include_finished: true })).text;
     expect(st).toMatch(/bg1\s+killed/); // recorded as killed, never as a background task
     expect(st).not.toMatch(/background/);
   }, 40_000);
@@ -92,8 +92,8 @@ function pgrepCount(n: number): number {
   }
 }
 
-async function liveStatus(live: Live, id: string) {
-  live.faux.setResponses([live.toolTurn(live.call("bg_status", {}, id)), live.text("ok")]);
+async function liveStatus(live: Live, id: string, args: Record<string, unknown> = {}) {
+  live.faux.setResponses([live.toolTurn(live.call("bg_status", args, id)), live.text("ok")]);
   await live.session.prompt("status");
   await until(() => live.toolResults().some((x) => x.id === id), 5000, "bg_status result");
   return live.toolResults().find((x) => x.id === id)!;
