@@ -6,8 +6,7 @@ import { killBoundMs, type Services } from "./runtime.js";
 /**
  * Shared by bg_kill, /bg kill and shutdown. One signal (default `term`) per running task; the runner owns the escalation to
  * SIGKILL. The wait for the exit is bounded (killBoundMs of termGraceMs) on the injected clock. The exit handler
- * does not delete `s.runtime` entries: the ring tail serves finished-task tails and degraded logs.
- * TODO(#12) P3 (runtime gc): memory is bounded per task by the ring size but unbounded in task count; evict old finished entries if sessions grow long.
+ * does not delete `s.runtime` entries: the ring tail serves finished-task tails and degraded logs until `evictFinished` releases it.
  */
 export async function killTasks(s: Services, which: TaskId[] | "all", cause: KillCause, signal: KillSignal = "term"): Promise<KillResult> {
   const result: KillResult = { killed: [], alreadyFinished: [], failed: [] };

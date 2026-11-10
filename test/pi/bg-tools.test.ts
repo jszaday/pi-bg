@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_WRITE_BYTES, registerBgTools } from "../../src/pi/bg-tools.js";
+import { evictFinished } from "../../src/pi/runtime.js";
 import { makeHarness, type Harness } from "./w6a-services.js";
 
 const exit0 = { code: 0, signal: null };
@@ -420,5 +421,44 @@ describe("bg_write", () => {
     await expect(call(h, "bg_write", { id: "bg5", data: "x" })).rejects.toThrow(/No task bg5/);
     await expect(call(h, "bg_write", { id: "bg1", data: "x" })).rejects.toThrow(/started before/);
     await expect(call(h, "bg_write", { id: "bg5" })).rejects.toThrow(/schema/);
+  });
+});
+
+describe("evicted runtime entries (#12)", () => {
+  function evictedSetup() {
+    const h = setup();
+    h.start("a", [{ at: 0, chunk: "one\ntwo\nthree\n", exit: exit0 }]);
+    h.start("b", [{ at: 0, chunk: "later\n", exit: exit0 }]);
+    return h;
+  }
+  it("bg_status of an evicted id answers from the log, as it did before eviction", async () => {
+    const h = evictedSetup();
+    await h.flush();
+    const before = await call(h, "bg_status", { id: "bg1", tail_lines: 2 });
+    evictFinished(h.s, 1);
+    expect(h.s.runtime.get("bg1")!.evicted).toBe(true);
+    expect(h.s.runtime.get("bg2")!.evicted).toBeUndefined();
+    const after = await call(h, "bg_status", { id: "bg1", tail_lines: 2 });
+    expect(sc(after).tasks[0].last_lines).toEqual(["two", "three"]);
+    expect(sc(after)).toEqual(sc(before));
+  });
+  it("bg_output of an evicted id reads the log: tail, grep and cursor", async () => {
+    const h = evictedSetup();
+    await h.flush();
+    const before = await call(h, "bg_output", { id: "bg1" });
+    evictFinished(h.s, 1);
+    const after = await call(h, "bg_output", { id: "bg1" });
+    expect(sc(after)).toEqual(sc(before));
+    expect(sc(after)).toMatchObject({ output: "one\ntwo\nthree", total_bytes: 14, next_cursor: 14, log_degraded: false });
+    expect(sc(await call(h, "bg_output", { id: "bg1", grep: "tw" })).output).toBe("two");
+    expect(sc(await call(h, "bg_output", { id: "bg1", since: 4 })).output).toBe("two\nthree");
+  });
+  it("an evicted id is still a known task, not unknown", async () => {
+    const h = evictedSetup();
+    await h.flush();
+    evictFinished(h.s, 0);
+    await expect(call(h, "bg_status", { id: "bg2" })).resolves.toBeDefined();
+    await expect(call(h, "bg_output", { id: "bg2" })).resolves.toBeDefined();
+    await expect(call(h, "bg_output", { id: "bg9" })).rejects.toThrow(/No task bg9/);
   });
 });

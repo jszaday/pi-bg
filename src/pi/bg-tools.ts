@@ -7,7 +7,7 @@ import { isTerminal } from "../core/task.js";
 import { SCHEMAS, type BgKillArgs, type BgOutputArgs, type BgStatusArgs, type BgWaitArgs, type BgWriteArgs } from "../tools/schemas.js";
 import { killTasks } from "./kill.js";
 import { toKillResult, toOutputResult, toStatusResult, toWaitResult, toWriteResult } from "./results.js";
-import type { Services } from "./runtime.js";
+import type { Services, TaskRuntime } from "./runtime.js";
 
 const DEFAULT_STATUS_TAIL = 10;
 const DEFAULT_STATUS_LIMIT = 10;
@@ -49,10 +49,16 @@ function sawTerminal(s: Services, tasks: Task[]): void {
 
 const decoder = new TextDecoder();
 
+/** The task's runtime while its output ring is still held; undefined once evicted (the log answers then). */
+function liveRuntime(s: Services, id: TaskId): TaskRuntime | undefined {
+  const rt = s.runtime.get(id);
+  return rt?.evicted ? undefined : rt;
+}
+
 /** Last `n` lines of a task: the in-memory ring while the task has live runtime, else the log; [] when neither has data. */
 async function tailOf(s: Services, t: Task, n: number): Promise<string[]> {
   if (n <= 0) return [];
-  const rt = s.runtime.get(t.id);
+  const rt = liveRuntime(s, t.id);
   if (rt) {
     const lines = rt.tail.lines(n);
     const partial = isTerminal(t) ? rt.tail.partial() : "";
@@ -145,7 +151,7 @@ async function readLog(s: Services, t: Task, stream: StreamName, since: number |
 
 // Fallback for a degraded or unreadable log: only the in-memory ring (best effort; `since` is not honoured).
 function readRing(s: Services, t: Task, since: number | undefined): Read {
-  const rt = s.runtime.get(t.id);
+  const rt = liveRuntime(s, t.id);
   const total = rt?.tail.totalBytes() ?? t.totalBytes;
   if (!rt || (since !== undefined && since >= total)) return { lines: [], nextCursor: total, totalBytes: total, truncated: false, fromLog: false };
   const lines = rt.tail.lines(Number.MAX_SAFE_INTEGER);
@@ -193,7 +199,7 @@ async function output(s: Services, p: BgOutputArgs, ctx: ExtensionContext): Prom
   const capped = capBytes(lines, maxBytes, p.since === undefined ? "end" : "start");
   const degraded = t.logDegraded || !read.fromLog;
   sawTerminal(s, [t]);
-  const rt = s.runtime.get(t.id);
+  const rt = liveRuntime(s, t.id);
   const notes: string[] = [];
   if (degraded) notes.push(failure("log_degraded", { id: t.id, error: "the log could not be written or read", kib: Math.round(s.config().output.ringBytes / 1024) }));
   if (p.stream !== undefined && p.stream !== stream) notes.push(failure("stream_unsupported", { stream: p.stream }));
