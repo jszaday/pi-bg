@@ -35,6 +35,17 @@ describe("installMoveKey", () => {
     expect(move).toHaveBeenCalledTimes(1);
   });
 
+  it("passes the key through to the editor when it holds text, and consumes it again once empty (#11)", () => {
+    const { pi, move, registry } = setup();
+    registry.create(w7Spec());
+    pi.ui.editorText = "steer me";
+    expect(pi.ui.typeKey(CTRL_B)).toBe(false);
+    expect(move).not.toHaveBeenCalled();
+    pi.ui.editorText = "";
+    expect(pi.ui.typeKey(CTRL_B)).toBe(true);
+    expect(move).toHaveBeenCalledTimes(1);
+  });
+
   it("passes a non-matching key through while movable", () => {
     const { pi, move, registry } = setup();
     registry.create(w7Spec());

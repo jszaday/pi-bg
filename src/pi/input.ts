@@ -10,10 +10,10 @@ export function installMoveKey(
 ): () => void {
   if (ctx.mode !== "tui" || !ctx.hasUI) return () => {};
   // Executed in tmux (spike S4): the listener runs mid-tool with the editor focused, so no registerShortcut fallback is needed.
-  // TODO(#11): P3 (editor-aware key). Passing the key on to the editor when ctx.ui.getEditorText() is non-empty is deferred; the key is consumed as the handoff.
   return ctx.ui.onTerminalInput((data) => {
     if (deps.registry.movable().length === 0) return undefined;
     if (!matchesKey(data, deps.key() as KeyId)) return undefined;
+    if (ctx.ui.getEditorText() !== "") return undefined; // the user is editing a prompt: leave the key to the editor (cursor-left)
     if (deps.move().length === 0) return undefined; // nothing actually moved: leave the key to the editor
     return { consume: true };
   });

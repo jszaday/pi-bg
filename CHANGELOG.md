@@ -6,6 +6,7 @@
 - Added: `bg_kill` takes an optional `signal` (`INT`, `HUP`, `TERM`, `QUIT`, `USR1`, `USR2` or `KILL`; default `TERM`) for programs that shut down cleanly only on one of them; SIGKILL still follows after the grace period unless `KILL` is chosen. The fallback runner accepts only `KILL` and rejects other signals with an explanation (#10).
 - Fixed: session shutdown now ends an active `bg_wait` (result `aborted`) and clears its timer instead of leaving it running (#13).
 - Fixed: `bg_wait` now ends at once with `user_message` when the user's steer or follow-up was queued before the wait started (for example while the model was streaming), instead of running until its timeout (#19).
+- Fixed: the move key now goes to the editor (cursor-left for `ctrl+b`) when the editor holds text, so editing a prompt during a foreground command works; with an empty editor it still moves the task (#11).
 
 ## 0.1.1 - 2026-11-09
 
