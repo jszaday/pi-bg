@@ -101,6 +101,7 @@ export interface TailBuffer {
   partial(): string;                    // current unterminated line
   lastLine(): string | undefined;
   totalBytes(): number;
+  totalLines(): number;                 // complete lines ever pushed (monotonic, counts evicted lines)
 }
 
 // ---- notification ----

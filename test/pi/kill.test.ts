@@ -47,7 +47,7 @@ describe("killTasks", () => {
     const t = h.s.registry.create({ command: "x", cwd: "/", hardTimeoutMs: null, bgTimeoutMs: null, notify: "done", startInBackground: true });
     const kill = vi.fn();
     const handle: ProcessHandle = { pid: 4242, exited: new Promise(() => {}), kill };
-    h.s.runtime.set(t.id, { handle, tail: { push() {}, lines: () => [], partial: () => "", lastLine: () => undefined, totalBytes: () => 0 }, timers: [] });
+    h.s.runtime.set(t.id, { handle, tail: { push() {}, lines: () => [], partial: () => "", lastLine: () => undefined, totalBytes: () => 0, totalLines: () => 0 }, timers: [] });
     let done = false;
     const p = killTasks(h.s, [t.id], "shutdown").then((r) => ((done = true), r));
     await h.flush();
@@ -70,7 +70,7 @@ describe("killTasks", () => {
     const h = makeHarness({ caps: { gracefulTerm: false } });
     const t = h.s.registry.create({ command: "x", cwd: "/", hardTimeoutMs: null, bgTimeoutMs: null, notify: "done", startInBackground: true });
     const handle: ProcessHandle = { pid: 4242, exited: new Promise(() => {}), kill: vi.fn() };
-    h.s.runtime.set(t.id, { handle, tail: { push() {}, lines: () => [], partial: () => "", lastLine: () => undefined, totalBytes: () => 0 }, timers: [] });
+    h.s.runtime.set(t.id, { handle, tail: { push() {}, lines: () => [], partial: () => "", lastLine: () => undefined, totalBytes: () => 0, totalLines: () => 0 }, timers: [] });
     const p = killTasks(h.s, [t.id], "bg_kill");
     await h.flush();
     h.clock.advance(h.config.kill.termGraceMs + 2000);
@@ -89,7 +89,7 @@ describe("killTasks", () => {
     const h = makeHarness();
     const t = h.s.registry.create({ command: "x", cwd: "/", hardTimeoutMs: null, bgTimeoutMs: null, notify: "done", startInBackground: true });
     const handle: ProcessHandle = { pid: 4242, exited: new Promise(() => {}), kill: vi.fn() };
-    h.s.runtime.set(t.id, { handle, tail: { push() {}, lines: () => [], partial: () => "", lastLine: () => undefined, totalBytes: () => 0 }, timers: [] });
+    h.s.runtime.set(t.id, { handle, tail: { push() {}, lines: () => [], partial: () => "", lastLine: () => undefined, totalBytes: () => 0, totalLines: () => 0 }, timers: [] });
     const p = killTasks(h.s, [t.id], "bg_kill", "hup");
     await h.flush();
     h.clock.advance(h.config.kill.termGraceMs + 2000);

@@ -34,12 +34,14 @@ export function createTailBuffer(ringBytes: number): TailBuffer {
   let head = 0; // index of the oldest byte
   let len = 0; // bytes held, never above cap
   let total = 0; // all bytes ever pushed
+  let newlines = 0; // all LF bytes ever pushed: complete lines, including evicted ones
   let prevByte: number | undefined; // the last evicted byte (the byte just before the window)
   const decoder = new TextDecoder("utf-8"); // non-fatal: invalid UTF-8 becomes U+FFFD
 
   function push(chunk: Uint8Array): void {
     total += chunk.length;
     if (chunk.length === 0) return;
+    for (let i = 0; i < chunk.length; i++) if (chunk[i] === NL) newlines++;
     if (chunk.length >= cap) {
       // The whole old window and the chunk's own head are evicted.
       prevByte = chunk.length > cap ? chunk[chunk.length - cap - 1] : len > 0 ? ring[(head + len - 1) % cap] : prevByte;
@@ -97,6 +99,7 @@ export function createTailBuffer(ringBytes: number): TailBuffer {
       return complete[complete.length - 1];
     },
     totalBytes: () => total,
+    totalLines: () => newlines,
   };
 }
 

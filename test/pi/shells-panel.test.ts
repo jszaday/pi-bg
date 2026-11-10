@@ -12,12 +12,13 @@ const PGDN = "\x1b[6~";
 
 const ok = (id: string): KillResult => ({ killed: [id], alreadyFinished: [], failed: [] });
 
-function setup(output: string[] = []) {
+function setup(output: string[] = [], dropped = { n: 0 }) {
   const s = w7Setup();
   const kill = vi.fn(async (id: string): Promise<KillResult> => ok(id));
   const tailOf = vi.fn((_id: string, n: number) => output.slice(-n));
+  const totalLinesOf = vi.fn(() => dropped.n + output.length);
   const setFooterFocus = vi.fn();
-  const panel = createShellsPanel({ registry: s.registry, clock: s.clock, kill, tailOf, setFooterFocus });
+  const panel = createShellsPanel({ registry: s.registry, clock: s.clock, kill, tailOf, totalLinesOf, setFooterFocus });
   const ctx = w7Ctx(s.pi);
   const bg = (over: Parameters<typeof w7Spec>[0] = {}) => s.registry.create(w7Spec({ startInBackground: true, ...over }));
   const exit = (id: string) => s.registry.dispatch(id, { type: "exit", code: 0, signal: null, at: s.clock.now() });
@@ -126,6 +127,27 @@ describe("shells panel", () => {
     out.push("line 102");
     t.clock.advance(1000);
     expect(t.lines().at(-2)).toBe("line 102");
+  });
+
+  it("a paused detail view stays put once the tail window is full and old lines drop out", () => {
+    const WINDOW = 500;
+    const all = Array.from({ length: WINDOW }, (_, i) => `line ${i}`);
+    const out = all.slice();
+    const dropped = { n: 0 };
+    const t = setup(out, dropped);
+    t.bg();
+    t.pi.ui.tui.terminal.rows = 20;
+    t.panel.open(t.ctx);
+    t.pi.ui.typeKey(ENTER);
+    t.pi.ui.typeKey(UP);
+    const paused = t.lines();
+    expect(paused.at(-2)).toBe("line 498");
+    // Window full: two new lines push two old ones out, so the window length stays 500.
+    out.push("line 500", "line 501");
+    out.splice(0, 2);
+    dropped.n += 2;
+    t.clock.advance(1000);
+    expect(t.lines().slice(2)).toEqual(paused.slice(2));
   });
 
   it("x kills the selected background task and passes through nothing else", () => {
@@ -274,6 +296,7 @@ describe("shells panel, released output", () => {
       clock: s.clock,
       kill: vi.fn(async (id: string) => ok(id)),
       tailOf: () => [],
+      totalLinesOf: () => 0,
       released: (id) => releasedIds.has(id),
       releasedTail,
       setFooterFocus: vi.fn(),

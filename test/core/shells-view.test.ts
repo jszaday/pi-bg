@@ -142,6 +142,9 @@ describe("onOutputGrowth", () => {
   it("clamps to the maximum scroll", () => {
     expect(onOutputGrowth(detail({ follow: false, scroll: 40 }), 3, 50, 10).scroll).toBe(40);
   });
+  it("moves up by lines added even when the output length did not change (full tail window)", () => {
+    expect(onOutputGrowth(detail({ follow: false, scroll: 5 }), 2, 500, 10).scroll).toBe(7);
+  });
   it("leaves a following detail view unchanged", () => {
     const s = detail();
     expect(onOutputGrowth(s, 3, 53, 10)).toBe(s);

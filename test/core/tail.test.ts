@@ -89,6 +89,13 @@ describe("createTailBuffer: lines", () => {
     b.push(new Uint8Array(0));
     expect(b.totalBytes()).toBe(11);
   });
+  it("totalLines counts every complete line ever pushed, even evicted ones, and ignores the partial", () => {
+    const b = createTailBuffer(8);
+    b.push(bytes("aaaa\nbbbb\n"));
+    b.push(bytes("cc\ndd"));
+    expect(b.lines(10)).toEqual(["cc"]);
+    expect(b.totalLines()).toBe(3);
+  });
   it("replaces invalid UTF-8 with U+FFFD without losing line structure", () => {
     const b = createTailBuffer(1024);
     b.push(Uint8Array.from([0x61, 0xff, 0xfe, 0x0a, 0x62, 0x0a]));
