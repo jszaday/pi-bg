@@ -231,6 +231,33 @@ describe("shells panel", () => {
     expect(t.panel.isOpen()).toBe(true);
   });
 
+  it.each(["close", "dispose"] as const)("%s before Pi runs the factory cancels the open and resets the flag", async (how) => {
+    const t = setup();
+    t.pi.ui.deferCustom = true;
+    t.panel.open(t.ctx);
+    expect(t.panel.isOpen()).toBe(true);
+    t.panel[how]();
+    expect(t.panel.isOpen()).toBe(false);
+    t.pi.ui.runDeferredCustom();
+    await t.overlay().result;
+    expect(t.overlay().closed).toBe(true);
+    expect(t.panel.isOpen()).toBe(false);
+    expect(t.clock.pending()).toBe(0);
+    t.pi.ui.deferCustom = false;
+    t.panel.open(t.ctx); // reopening works
+    expect(t.panel.isOpen()).toBe(true);
+    expect(t.overlay().closed).toBe(false);
+  });
+
+  it("an open that is not closed before the deferred factory runs still shows (negative control)", () => {
+    const t = setup();
+    t.pi.ui.deferCustom = true;
+    t.panel.open(t.ctx);
+    t.pi.ui.runDeferredCustom();
+    expect(t.panel.isOpen()).toBe(true);
+    expect(t.overlay().closed).toBe(false);
+  });
+
   it("dispose on a panel that was never opened is a no-op", () => {
     const t = setup();
     expect(() => t.panel.dispose()).not.toThrow();
