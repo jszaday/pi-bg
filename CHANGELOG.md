@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1 - 2026-11-09
+
+- Fixed: a background job started with `&` inside a task is now killed at session shutdown and after a Pi crash, instead of surviving as an orphan (#18).
+- Fixed: log cleanup now deletes only directories pi-bg created (those with an `owner.pid`), so unrelated directories under a custom `output.logDir` are kept; a relative `output.logDir` is rejected with a warning (#20).
+- Fixed: config read errors, invalid JSON, log-cleanup failures and `kill_not_exited` now report their own cause and action, and `kill_not_exited` no longer mentions SIGTERM for the fallback runner (#21).
+- Fixed: the `key` setting is validated and normalised (case, `-` as a separator); an invalid value warns and falls back to `ctrl+b`, and the hint shows the key in effect (#14).
+- Changed: tested against Pi 1.5.1 (the dev dependency and the live gated suite).
+- Security: dev-dependency updates for undici and minimatch; no runtime dependency is affected, because the published package has none (Pi, Pi TUI and typebox are peer dependencies only).
+- Internal: CI runs the live (gated) test subset on every push and the full set weekly.
+
 ## 0.1.0 - 2026-11-09
 
 - `bash` tool replaces the built-in: runs commands in the background with `run_in_background`, moves a call to the background after `bg_timeout` seconds (default 30, `0` disables), and accepts `notify` and `description` per call.

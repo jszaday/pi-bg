@@ -6,9 +6,9 @@ Background tasks for the [Pi coding agent](https://github.com/earendil-works/pi)
 
 ## Status
 
-Version 0.1.0, the first release, available from git (see Install). Tested against Pi 1.4.0; POSIX only (Linux and macOS). All six features below are implemented and covered by unit tests and live (gated) tests against a real Pi session. Open items are tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues).
+Version 0.1.1, available from git (see Install). Tested against Pi 1.5.1; POSIX only (Linux and macOS). All six features below are implemented and covered by unit tests and live (gated) tests against a real Pi session. Open items are tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues).
 
-Requirements: Pi (`pi-coding-agent`) 1.4.0, the version it is tested against; Node.js 22.19 or newer; a POSIX system (Linux or macOS).
+Requirements: Pi (`pi-coding-agent`) 1.5.1, the version it is tested against; Node.js 22.19 or newer; a POSIX system (Linux or macOS).
 
 ## Features
 

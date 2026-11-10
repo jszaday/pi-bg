@@ -1,6 +1,6 @@
 # pi-bg: design
 
-pi-bg is a Pi (pi-coding-agent 1.4.0) extension that lets bash commands run in the background: start them there, move them there with a key, auto-move them after a timeout, wait on them without blocking the user, and be told when they finish. This document is the design of record. Open work is tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues); this file does not restate it.
+pi-bg is a Pi (pi-coding-agent 1.5.1) extension that lets bash commands run in the background: start them there, move them there with a key, auto-move them after a timeout, wait on them without blocking the user, and be told when they finish. This document is the design of record. Open work is tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues); this file does not restate it.
 
 ## 1. Scope, requirements, terms
 
