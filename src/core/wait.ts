@@ -24,6 +24,7 @@ export class WaitCoordinator {
   private readonly active = new Set<ActiveWait>();
   private readonly queueSettleMs: number;
   private readonly queueMaxMs: number;
+  private userMessageQueued = false;
 
   constructor(
     private readonly deps: {
@@ -54,6 +55,7 @@ export class WaitCoordinator {
     };
     if (isDone()) return Promise.resolve(done("finished"));
     if (signal?.aborted) return Promise.resolve(done("aborted"));
+    if (this.userMessageQueued) return Promise.resolve(done("user_message")); // queued before this wait began
 
     const timeoutMs = this.clampTimeout(req.timeoutMs);
     if (timeoutMs <= 0) return Promise.resolve(done("timeout"));
@@ -108,6 +110,16 @@ export class WaitCoordinator {
       };
       step(Math.min(this.queueSettleMs, this.queueMaxMs));
     }
+  }
+
+  // A user message was queued while no wait was active. Waits that start before the next turn begins end at once, because
+  // Pi delivers the message only after the current tool batch. Cleared by clearQueuedUserMessage at turn_start.
+  rememberUserMessage(): void {
+    this.userMessageQueued = true;
+  }
+
+  clearQueuedUserMessage(): void {
+    this.userMessageQueued = false;
   }
 
   // Session shutdown: resolve every active wait as `aborted` and clear its timers, so none outlives the session.
