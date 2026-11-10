@@ -1,12 +1,12 @@
 # pi-bg
 
-[![npm version](https://img.shields.io/npm/v/pi-bg)](https://www.npmjs.com/package/pi-bg) [![CI](https://github.com/jszaday/pi-bg/actions/workflows/ci.yml/badge.svg)](https://github.com/jszaday/pi-bg/actions/workflows/ci.yml) [![license](https://img.shields.io/npm/l/pi-bg)](LICENSE)
+[![CI](https://github.com/jszaday/pi-bg/actions/workflows/ci.yml/badge.svg)](https://github.com/jszaday/pi-bg/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/jszaday/pi-bg)](LICENSE)
 
 Background tasks for the [Pi coding agent](https://github.com/earendil-works/pi) (`pi-coding-agent`). Pi's built-in `bash` tool blocks the agent until a command ends, so a dev server, a long build or a slow test run either stalls the session or has to be killed. pi-bg lets a running command move to the background while the agent keeps working, and gives the agent tools to check on it, wait for it and stop it.
 
 ## Status
 
-Version 0.1.0, the first release. Tested against Pi 1.4.0; POSIX only (Linux and macOS). All six features below are implemented and covered by unit tests and live (gated) tests against a real Pi session. Open items are tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues).
+Version 0.1.0, the first release, available from git (see Install). Tested against Pi 1.4.0; POSIX only (Linux and macOS). All six features below are implemented and covered by unit tests and live (gated) tests against a real Pi session. Open items are tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues).
 
 Requirements: Pi (`pi-coding-agent`) 1.4.0, the version it is tested against; Node.js 22.19 or newer; a POSIX system (Linux or macOS).
 
@@ -21,12 +21,6 @@ Requirements: Pi (`pi-coding-agent`) 1.4.0, the version it is tested against; No
 
 ## Install
 
-From npm:
-
-```
-pi install npm:pi-bg
-```
-
 From git:
 
 ```
@@ -38,6 +32,8 @@ From a local checkout:
 ```
 pi install /path/to/pi-bg
 ```
+
+An npm release is planned.
 
 Both the commands above write a package entry to `~/.pi/agent/settings.json`. Add `-l` to write it to `.pi/settings.json` instead; Pi reads project declarations only after the project is trusted. To try the extension for one run without installing it, pass `-e /path/to/pi-bg`. The package is loaded through the `pi.extensions` field of `package.json`, which points at `src/index.ts`. See Pi's package documentation for the other source forms.
 
