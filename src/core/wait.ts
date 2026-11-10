@@ -110,6 +110,11 @@ export class WaitCoordinator {
     }
   }
 
+  // Session shutdown: resolve every active wait as `aborted` and clear its timers, so none outlives the session.
+  dispose(): void {
+    for (const w of [...this.active]) w.finish("aborted");
+  }
+
   activeWaitIds(): TaskId[] {
     const out = new Set<TaskId>();
     for (const w of this.active) for (const id of w.ids) out.add(id);

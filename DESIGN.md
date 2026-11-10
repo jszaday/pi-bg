@@ -286,7 +286,7 @@ Scope: this is the closest requirement to richardgill (30 s, per-call, backgroun
 
 Start: the extension factory registers all five tools (a registration cannot be added conditionally later). `session_start` reseeds ids, runs log GC, checks bash ownership (below), installs the move-key listener and creates the UI. Per call: create task, start runner, wire timers and sinks.
 
-Exit paths: `session_shutdown` fires for every reason (quit, reload, new, resume, fork); pi-bg kills all running tasks on all of them (locked decision; the cost is that `/reload` kills background work, noted in `/bg` help). The handler is idempotent, cancels timers, signals the process groups, waits up to 5 s (bounded) for exits, closes log files, unsubscribes the input listener and clears the status. A `process.on("exit")` backstop synchronously SIGKILLs any still-registered groups, for exit paths that skip the event.
+Exit paths: `session_shutdown` fires for every reason (quit, reload, new, resume, fork); pi-bg kills all running tasks on all of them (locked decision; the cost is that `/reload` kills background work, noted in `/bg` help). The handler is idempotent, cancels timers, ends an active `bg_wait` as `aborted`, signals the process groups, waits up to 5 s (bounded) for exits, closes log files, unsubscribes the input listener and clears the status. A `process.on("exit")` backstop synchronously SIGKILLs any still-registered groups, for exit paths that skip the event.
 
 Esc: aborting a turn while a task is foreground kills it (native semantics); once handed off, Esc never kills it (Claude Code same). 
 

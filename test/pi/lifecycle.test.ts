@@ -138,6 +138,18 @@ describe("session_shutdown", () => {
     });
   }
 
+  it("resolves an active bg_wait as aborted and clears its timer (#13)", async () => {
+    const x = setup();
+    await start(x);
+    const t = w8Task(x.h);
+    const p = x.h.s.waits.wait({ ids: [t.id], mode: "any", timeoutMs: 60_000 }, undefined);
+    expect(x.h.clock.pending()).toBe(1);
+    await x.pi.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
+    expect((await p).reason).toBe("aborted");
+    expect(x.h.clock.pending()).toBe(0);
+    expect(x.h.s.waits.activeWaitIds()).toEqual([]);
+  });
+
   it("discards a pending notification instead of sending it, and cancels the batching timer", async () => {
     const x = setup();
     await start(x);
