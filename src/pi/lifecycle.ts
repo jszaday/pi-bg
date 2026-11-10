@@ -26,6 +26,10 @@ export interface LifecycleDeps {
   ui: { onSessionStart(ctx: ExtensionContext): void; dispose(): void };
   /** Absolute path of pi-bg's entry file, to recognise our own `bash` registration (S7). */
   ownPath?: string;
+  /** Called when a reload keeps its tasks (#2): index hands the shared state to the next instance. `release` removes this instance's exit backstop. */
+  retain?: (release: () => void) => void;
+  /** `release` of the state this instance adopted; called once its own exit backstop is installed. */
+  adopted?: () => void;
   platform?: string;
   /** Test seams for the exit backstop. */
   proc?: { on(ev: "exit", fn: () => void): unknown; off(ev: "exit", fn: () => void): unknown };
@@ -183,25 +187,34 @@ export function installLifecycle(pi: ExtensionAPI, s: Services, deps: LifecycleD
       proc.on("exit", backstop);
       backstopOn = true;
     }
+    deps.adopted?.();
   });
 
   // Executed in tmux (spike S6): Pi awaits async session_shutdown on every path but never kills extension tasks; "exit" does not fire on reload/new/resume, so this handler is the primary path and the exit backstop covers the rest.
-  pi.on("session_shutdown", async () => {
-    for (const rt of s.runtime.values()) for (const t of rt.timers) s.clock.clearTimeout(t);
+  pi.on("session_shutdown", async (event) => {
+    // keepOnReload (#2): a reload leaves background tasks running for the re-initialised extension to adopt. Foreground tasks (not movable across the reload) and every other reason keep the kill path.
+    const running = s.registry.running();
+    const keep = event?.reason === "reload" && deps.retain !== undefined && s.config().lifecycle.keepOnReload && running.length > 0 && running.every((t) => t.state === "background");
+    if (!keep) for (const rt of s.runtime.values()) for (const t of rt.timers) s.clock.clearTimeout(t); // kept tasks keep their hard-timeout timers
     s.notify.discard(); // a message now would wake a dying session; tasks killed below are suppressed anyway
     s.waits.dispose(); // an active bg_wait would otherwise keep its timer after shutdown (#13)
-    await killAll(s, killGroup);
-    for (const rt of s.runtime.values()) {
-      try {
-        await rt.log?.close();
-      } catch {
-        // log already closed or failing; the task's logDegraded carries the cause
+    if (keep) {
+      // The exit backstop stays until the next instance installs its own, so Pi exiting after a reload that never re-initialises us still kills the tasks.
+      deps.retain!(() => { if (backstopOn) { proc.off("exit", backstop); backstopOn = false; } });
+    } else {
+      await killAll(s, killGroup);
+      for (const rt of s.runtime.values()) {
+        try {
+          await rt.log?.close();
+        } catch {
+          // log already closed or failing; the task's logDegraded carries the cause
+        }
       }
     }
     deps.ui.dispose();
     unsubscribeKey?.();
     unsubscribeKey = undefined;
-    if (backstopOn) {
+    if (backstopOn && !keep) {
       proc.off("exit", backstop);
       backstopOn = false;
     }

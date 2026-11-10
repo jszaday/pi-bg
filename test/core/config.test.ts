@@ -43,7 +43,7 @@ describe("parseConfig defaults and precedence", () => {
       key: "ctrl+x", hintAfterMs: 0,
       wait: { defaultTimeoutSeconds: 10, maxTimeoutSeconds: 20 },
       output: { tailLines: 5, maxBytes: 100, ringBytes: 200, maxLogBytes: 300, logRetentionDays: 0, logDir: "/tmp/x" },
-      maxRunningTasks: 2, kill: { termGraceMs: 0 },
+      maxRunningTasks: 2, kill: { termGraceMs: 0 }, lifecycle: { keepOnReload: true },
     };
     const { config, warnings } = parseConfig({ global: full });
     expect(warnings).toEqual([]);
@@ -59,7 +59,7 @@ describe("parseConfig warnings", () => {
     ["wait.defaultTimeoutSeconds", 0], ["wait.maxTimeoutSeconds", -3],
     ["output.tailLines", 0], ["output.tailLines", 1.5], ["output.maxBytes", "big"], ["output.ringBytes", 0],
     ["output.maxLogBytes", -1], ["output.logRetentionDays", -1], ["output.logDir", ""], ["output.logDir", 5],
-    ["maxRunningTasks", 0], ["kill.termGraceMs", -1],
+    ["maxRunningTasks", 0], ["kill.termGraceMs", -1], ["lifecycle.keepOnReload", "yes"],
   ];
   it.each(invalid)("invalid %s = %j warns with path, cause and action, and keeps the default", (path, value) => {
     const obj: Record<string, unknown> = {};

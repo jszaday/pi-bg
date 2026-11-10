@@ -129,4 +129,5 @@ export interface BgConfig {
   output: { tailLines: number; maxBytes: number; ringBytes: number; maxLogBytes: number; logRetentionDays: number; logDir: string | null };
   maxRunningTasks: number;
   kill: { termGraceMs: number };
+  lifecycle: { keepOnReload: boolean };
 }

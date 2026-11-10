@@ -191,6 +191,7 @@ Keys and defaults:
 | `enabled` | true | false (set by `--no-bg`) makes pi-bg's `bash` a pass-through to the native tool and the `bg_*` tools answer inactive |
 | `maxRunningTasks` | 16 | concurrent background tasks; a safety bound against runaway loops, not a tuned value |
 | `kill.termGraceMs` | 3000 | SIGTERM to SIGKILL delay |
+| `lifecycle.keepOnReload` | false | keep background tasks running across `/reload` instead of killing them (section 12) |
 
 The 30 s default is the top of the requested 20 to 30 s band, chosen because it matches the closest prior art (richardgill) and keeps ordinary builds foreground; the coordinator can change it (Q6). Invalid config is never fatal: each bad key is reported once with its path and the default used (section 13).
 
@@ -295,7 +296,7 @@ Scope: this is the closest requirement to richardgill (30 s, per-call, backgroun
 
 Start: the extension factory registers all six tools (a registration cannot be added conditionally later). `session_start` reseeds ids, runs log GC, checks bash ownership (below), installs the move-key listener and creates the UI. Per call: create task, start runner, wire timers and sinks.
 
-Exit paths: `session_shutdown` fires for every reason (quit, reload, new, resume, fork); pi-bg kills all running tasks on all of them (locked decision; the cost is that `/reload` kills background work, noted in `/bg` help). The handler is idempotent, cancels timers, ends an active `bg_wait` as `aborted`, signals the process groups, waits up to 5 s (bounded) for exits, closes log files, unsubscribes the input listener and clears the status. A `process.on("exit")` backstop synchronously SIGKILLs any still-registered groups, for exit paths that skip the event.
+Exit paths: `session_shutdown` fires for every reason (quit, reload, new, resume, fork); pi-bg kills all running tasks on all of them (locked decision), except that with `lifecycle.keepOnReload` a `reload` keeps background tasks running (below). The handler is idempotent, cancels timers, ends an active `bg_wait` as `aborted`, signals the process groups, waits up to 5 s (bounded) for exits, closes log files, unsubscribes the input listener and clears the status. A `process.on("exit")` backstop synchronously SIGKILLs any still-registered groups, for exit paths that skip the event.
 
 Esc: aborting a turn while a task is foreground kills it (native semantics); once handed off, Esc never kills it (Claude Code same). 
 
@@ -305,7 +306,9 @@ Jobs left behind by a finished task (#18): a command such as `sleep 300 &` exits
 
 A process group alone does not cover daemons that `setsid` away; documented as a known limit shared by all surveyed extensions. A job started with `&` stays in the group and is covered (above).
 
-Resumed or reloaded sessions: ids in the transcript refer to dead tasks; `bg_status` on such an id answers with the cause and action (section 13). Persistence across resume is deferred (issue #2).
+Keeping tasks across `/reload` (`lifecycle.keepOnReload`, default off, #2): `/reload` emits `session_shutdown` with reason `reload`, then re-evaluates the extension module in the same Node process (Pi 1.5.1: `AgentSession.reload` in `agent-session.js` emits the event, builds a new runtime, and the extension loader uses jiti with `moduleCache: false`; read from the package source, not run against a live Pi). One JS realm means a `Symbol.for("pi-bg.kept-on-reload")` slot on `globalThis` (`src/pi/reload-slot.ts`) reaches the new instance. When the setting is on, the reason is `reload`, at least one task runs and every running task is `background`, the handler skips the kill: it still discards pending notifications, ends an active `bg_wait` as `aborted` (its result says background tasks keep running, which is true here), unsubscribes its notification and wait listeners, disposes its UI and key listener, and leaves the log writers and the tasks' hard-timeout timers alone. It puts the registry, the runtime table and the id allocator's reseed in the slot. The next factory call takes the slot (once) and builds its services around that registry and table, subscribing its own notify policy and wait coordinator. Log cleanup cannot remove an adopted session's logs: it skips the current session directory and any directory whose `owner.pid` is this process. The old instance's exit backstop stays until the new instance has installed its own, so a reload that never re-initialises pi-bg still kills the tasks when Pi exits. Every other reason, the setting off, and a reload with a foreground task still kill everything, so the no-orphans guarantee is unchanged. Limits: tasks do not survive Pi itself restarting (that is the rejected cross-process persistence), and the adopted tasks' output sinks and exit handlers keep the previous instance's UI sink for rare warnings (log degradation, listener failure), which are then dropped silently.
+
+Resumed sessions: ids in the transcript refer to dead tasks; `bg_status` on such an id answers with the cause and action (section 13). Persistence across resume, `/new`, fork and Pi restarts is not built (issue #2).
 
 ## 13. Failure messages
 
