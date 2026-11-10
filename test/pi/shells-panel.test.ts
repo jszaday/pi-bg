@@ -44,7 +44,8 @@ describe("shells panel", () => {
     expect(t.overlay().opts).toMatchObject({ overlay: true });
     const lines = t.lines();
     expect(lines[0]).toContain("\x1b[7m");
-    expect(lines[0]).toContain("make one");
+    expect(lines[0]).toContain("make two"); // newest first
+    expect(lines[1]).toContain("make one");
     expect(lines[1]).not.toContain("\x1b[7m");
     expect(lines.at(-1)).toContain("esc close");
   });
@@ -59,6 +60,17 @@ describe("shells panel", () => {
       for (const l of view) expect([...l.replace(/\x1b\[\d+m/g, "")]).toHaveLength(40);
     }
     expect(t.raw(40)[3]).toBe("├" + "─".repeat(38) + "┤");
+  });
+
+  it("lists running shells first, then finished ones, newest first within each group", () => {
+    const t = setup();
+    const a = t.bg({ command: "first" });
+    t.bg({ command: "second" });
+    t.bg({ command: "third" });
+    t.exit(a.id);
+    t.panel.open(t.ctx);
+    const commands = t.lines().filter((l) => /first|second|third/.test(l)).map((l) => /first|second|third/.exec(l)![0]);
+    expect(commands).toEqual(["third", "second", "first"]);
   });
 
   it("shows the empty text and does not open a second overlay when opened twice", () => {
@@ -252,8 +264,8 @@ describe("shells panel", () => {
     const b = t.bg({ command: "two" });
     t.panel.open(t.ctx);
     t.pi.ui.typeKey(DOWN);
-    t.exit(b.id); // the row stays listed (finished), still selected
-    expect(t.lines()[1]).toContain("\x1b[7m");
+    t.exit(b.id); // "two" sinks below the running "one", which stays selected and moves up
+    expect(t.lines()[0]).toMatch(/\x1b\[7m.*one/);
   });
 
   it("dispose closes the overlay and clears timers; reopening works", () => {

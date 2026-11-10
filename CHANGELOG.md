@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Changed: the shells panel lists running shells first, then finished ones, newest first within each group, the same order `bg_status` uses.
 - Changed: the shells panel is drawn as a rounded box with themed border, an accent marker and highlighted background on the selected row, and a dim hint line; the detail output area is three lines shorter to make room for the frame.
 - Added: `bash` takes `stdin: true` to give a command a writable stdin, and the new `bg_write` tool writes to it (up to 64 KiB per call; `eof` closes stdin). Without `stdin` a task's stdin stays closed as before; the fallback runner rejects `stdin`, and writing to a task without stdin or one that has ended returns an explanation (#6).
 - Fixed: a long session no longer keeps an output ring for every finished task; only the newest 50 do, and `bg_status` and `bg_output` read older tasks from their log files (#12).

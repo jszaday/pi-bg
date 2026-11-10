@@ -5,6 +5,7 @@ import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tu
 import type { Clock, TaskId, TaskSummary, TimerHandle } from "../contract.js";
 import { killText, type KillResult } from "../core/format.js";
 import type { TaskRegistry } from "../core/registry.js";
+import { compareForDisplay } from "../core/task.js";
 import {
   initialView, onOutputGrowth, reconcile, reduce, renderDetail, renderList, shellRows,
   type ShellsKey, type ShellsViewState,
@@ -120,7 +121,9 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
               redrawSoon();
             };
             const rowsNow = (): TaskSummary[] =>
-              shellRows(deps.registry.list().map((t) => deps.registry.summarize(t, tailLines(t.id, 1))));
+              shellRows(
+                [...deps.registry.list()].sort(compareForDisplay).map((t) => deps.registry.summarize(t, tailLines(t.id, 1))),
+              );
             let rows = rowsNow();
             let view: ShellsViewState = initialView(rows);
             let redrawTimer: TimerHandle | undefined;

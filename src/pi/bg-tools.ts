@@ -3,7 +3,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { KillSignal, StreamName, Task, TaskId, TaskSummary } from "../contract.js";
 import { failure } from "../core/format.js";
 import { grepLines, normalizeForDisplay } from "../core/tail.js";
-import { isTerminal } from "../core/task.js";
+import { compareForDisplay, isTerminal } from "../core/task.js";
 import { SCHEMAS, type BgKillArgs, type BgMonitorArgs, type BgOutputArgs, type BgStatusArgs, type BgWaitArgs, type BgWriteArgs } from "../tools/schemas.js";
 import { killTasks } from "./kill.js";
 import { toKillResult, toMonitorResult, toOutputResult, toStatusResult, toWaitResult, toWriteResult } from "./results.js";
@@ -100,8 +100,7 @@ async function status(s: Services, p: BgStatusArgs, ctx: ExtensionContext): Prom
   }
   const all = s.registry.list();
   const listed = all.filter((t) => p.include_finished === true || !isTerminal(t));
-  // Running tasks first, then finished ones; most recently started first within each group.
-  listed.sort((a, b) => Number(isTerminal(a)) - Number(isTerminal(b)) || b.startedAt - a.startedAt || b.id.localeCompare(a.id, undefined, { numeric: true }));
+  listed.sort(compareForDisplay);
   const offset = p.offset ?? 0;
   const tasks = listed.slice(offset, offset + (p.limit ?? DEFAULT_STATUS_LIMIT));
   sawTerminal(s, tasks);

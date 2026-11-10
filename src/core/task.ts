@@ -10,6 +10,15 @@ export function isTerminal(t: Task): boolean {
   return TERMINAL.has(t.state);
 }
 
+/** Display order shared by `bg_status` and the shells panel: running tasks first, then finished ones; newest first within each group. */
+export function compareForDisplay(a: Task, b: Task): number {
+  return (
+    Number(isTerminal(a)) - Number(isTerminal(b)) ||
+    b.startedAt - a.startedAt ||
+    b.id.localeCompare(a.id, undefined, { numeric: true })
+  );
+}
+
 export function newTask(id: TaskId, spec: TaskSpec, now: number): Task {
   const base: Task = {
     id,
