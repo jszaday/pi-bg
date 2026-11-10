@@ -13,7 +13,7 @@ import { NotificationPolicy } from "./core/notify-policy.js";
 import { TaskRegistry } from "./core/registry.js";
 import { WaitCoordinator } from "./core/wait.js";
 import { registerBashTool } from "./pi/bash-tool.js";
-import { registerBgTools } from "./pi/bg-tools.js";
+import { commandTail, registerBgTools } from "./pi/bg-tools.js";
 import { registerBgCommand } from "./pi/command.js";
 import { registerFlags, setSessionOverride } from "./pi/config-load.js";
 import { installInputHandler } from "./pi/input-handler.js";
@@ -140,7 +140,7 @@ export default function piBg(pi: ExtensionAPI): void {
     kill: (id) => killTasks(s, id === "all" ? "all" : [id], "command"),
     move: () => bash.handoffAllMovable("user"),
     setSession: (k, v) => setSessionOverride(s, k, v),
-    tailOf: (id) => tailOf(id, config.output.tailLines),
+    tailOf: (id) => commandTail(s, registry.get(id)!, config.output.tailLines),
   });
   registerNotificationRenderer(pi);
   installInputHandler(pi, s);

@@ -48,6 +48,14 @@ describe("/bg", () => {
     expect(t.tailOf).toHaveBeenCalledWith("bg1");
   });
 
+  it("tail awaits an asynchronous tail source (log fallback for evicted tasks, #26)", async () => {
+    const t = setup();
+    t.registry.create(w7Spec({ startInBackground: true }));
+    t.tailOf.mockImplementation((() => Promise.resolve(["from log"])) as any);
+    const [n] = await t.run("tail bg1");
+    expect(n.msg).toContain("from log");
+  });
+
   it("tail reports unknown and stale ids as errors", async () => {
     const t = setup();
     t.registry.create(w7Spec({ startInBackground: true }));
