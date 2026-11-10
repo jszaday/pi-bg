@@ -99,7 +99,7 @@ An invalid key is not fatal. pi-bg reports the key, the problem and the default 
 - Output logs are written under the system temporary directory. Logs of finished tasks outlive the session and are removed after a retention period. A task whose log reaches the per-task cap stops writing to the log; it is not killed, and its in-memory tail keeps updating.
 - Windows is not supported.
 
-For the reasoning behind these limits, the open items and the planned work, see [DESIGN.md](https://github.com/jszaday/pi-bg/blob/main/DESIGN.md) sections 12 and 17 and the [open issues](https://github.com/jszaday/pi-bg/issues).
+For the reasoning behind these limits, the known limitations and the planned work, see [DESIGN.md](https://github.com/jszaday/pi-bg/blob/main/DESIGN.md) sections 12 and 17 (17.1 lists each limitation with its reopen trigger) and the [issues](https://github.com/jszaday/pi-bg/issues).
 
 ## Security and privacy
 

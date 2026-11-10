@@ -17,7 +17,7 @@ Requirements (from the user):
 
 Locked decisions: new build (borrow ideas, no forks); TypeScript with no runtime dependency beyond what Pi provides; tasks are killed when the session exits (persistence is deferred); the built-in `bash` is replaced through a same-name `registerTool`; testable logic lives in pure modules separate from Pi glue; the key is rebindable and captured only while a movable tool is running; guard against Claude Code's known failure modes (section 15).
 
-Interpretation made here: "tool" means the `bash` tool in v1. Pi has no way to detach an arbitrary in-flight tool call, and only process-backed work can outlive its tool call safely. Generalizing is deferred (issue #5). Platform: POSIX (Linux, macOS) only in v1; on Windows the extension stays inactive and says why.
+Interpretation made here: "tool" means the `bash` tool in v1. Pi has no way to detach an arbitrary in-flight tool call, and only process-backed work can outlive its tool call safely. Generalizing is a known limitation (section 17.1). Platform: POSIX (Linux, macOS) only in v1; on Windows the extension stays inactive and says why.
 
 Terms.
 - **Task**: one command run by pi-bg, with an id (`bg1`, `bg2`, ...), a lifecycle state and an output log.
@@ -325,7 +325,7 @@ A process group alone does not cover daemons that `setsid` away; documented as a
 
 Keeping tasks across `/reload` (`lifecycle.keepOnReload`, default off, #2): `/reload` emits `session_shutdown` with reason `reload`, then re-evaluates the extension module in the same Node process (Pi 1.5.1: `AgentSession.reload` in `agent-session.js` emits the event, builds a new runtime, and the extension loader uses jiti with `moduleCache: false`; read from the package source, not run against a live Pi). One JS realm means a `Symbol.for("pi-bg.kept-on-reload")` slot on `globalThis` (`src/pi/reload-slot.ts`) reaches the new instance. When the setting is on, the reason is `reload`, at least one task runs and every running task is `background`, the handler skips the kill: it still discards pending notifications, ends an active `bg_wait` as `aborted` (its result says background tasks keep running, which is true here), unsubscribes its notification and wait listeners, disposes its UI and key listener, and leaves the log writers and the tasks' hard-timeout timers alone. It puts the registry, the runtime table and the id allocator's reseed in the slot. The next factory call takes the slot (once) and builds its services around that registry and table, subscribing its own notify policy and wait coordinator. Log cleanup cannot remove an adopted session's logs: it skips the current session directory and any directory whose `owner.pid` is this process. The old instance's exit backstop stays until the new instance has installed its own, so a reload that never re-initialises pi-bg still kills the tasks when Pi exits. Every other reason, the setting off, and a reload with a foreground task still kill everything, so the no-orphans guarantee is unchanged. A `bg_monitor` monitor does not survive the reload (section 5.8). Limits: tasks do not survive Pi itself restarting (that is the rejected cross-process persistence), and the adopted tasks' output sinks and exit handlers keep the previous instance's UI sink for rare warnings (log degradation, listener failure), which are then dropped silently.
 
-Resumed sessions: ids in the transcript refer to dead tasks; `bg_status` on such an id answers with the cause and action (section 13). Persistence across resume, `/new`, fork and Pi restarts is not built (issue #2).
+Resumed sessions: ids in the transcript refer to dead tasks; `bg_status` on such an id answers with the cause and action (section 13). Persistence across resume, `/new`, fork and Pi restarts is not built (section 17.1).
 
 ## 13. Failure messages
 
@@ -422,10 +422,21 @@ Principle: policy lives in pure modules, tested with a fake clock and fake ports
 | Once-only status and one redelivery | S5 shows a cheaper reliable ack |
 | No log kill at cap | a runaway producer harms the host |
 | Hard `timeout` on pi-bg's clock | Pi exposes a per-call timer API, or the double clock causes a divergence bug |
-| Kill on every session shutdown | persistence work is tracked in issue #2 |
+| Kill on every session shutdown | cross-process persistence is wanted (section 17.1) |
 | `bg_monitor` is a separate tool, not a `bash` parameter | users want monitoring from the start of a command: add a `monitor` parameter to `bash` (a parameter cannot attach to a task that is already running) |
 | Reaper only with own-spawn | Pi exposes pid or process-group control |
 | POSIX only | a Windows user base appears |
 | Footer Down is captured only when the `TUI` handle shows no overlay and the focused component is the editor (duck-typed on `isShowingAutocomplete`) with no autocomplete menu; empty editor text stands in for exhausted prompt history | Pi exposes a dialog, overlay or focus flag, or the duck-typed editor check fails on a Pi upgrade |
 
-Deferred (tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues)): persistence across resume and reload (#2); generic tool backgrounding (#5); Windows (#8); a standalone `bg_start` fallback (#9).
+### 17.1 Known limitations
+
+These are accepted gaps that cannot be closed inside this repository, or are not worth closing until the trigger fires. Each lists the current behavior, why it stays, and what reopens it. The issues that once tracked these (#3, #4, #5, #8, #9; #2 for the last) were closed; this section is now the record.
+
+- **The orphan reaper does not cover the fallback runner** (formerly #3). The Pi-ops fallback runner is chosen only when no shell resolves (on POSIX, a nonexistent custom shell path, where Pi's own `bash` tool fails too). It exposes no pid, so the detached reaper (section 12) is not started for it, and tasks it runs can survive as orphans if Pi is killed with SIGKILL or crashes. Not addressed because the case is rare and the reaper needs a pid that the runner cannot supply. Reopen when an orphan from the fallback runner is reported, or when Windows support is taken up.
+- **`bg_wait` wakes on the `input` event, not a Pi queue event** (formerly #4). Pi 1.5.1 exposes no extension-visible queue-update event, so the wait ends on `input` after a settle delay (section 8). At worst a wait returns early once for a message that was not a steer. Blocked upstream: the extension cannot observe the queue. Reopen when Pi ships a queue-update event for extensions or aborts tool signals on steer (section 8.3).
+- **Only `bash` can be backgrounded** (formerly #5). Pi cannot detach a tool call that is already running, and only process-backed work can outlive its call, so other tools stay foreground. Blocked upstream. Reopen when Pi gains a way to detach a running tool call and there is demand for backgrounding non-`bash` tools.
+- **Windows is unsupported** (formerly #8). On Windows the extension goes inactive (`unsupported_platform`) and leaves the built-in `bash` unchanged; process groups, the reaper and the shell adapter assume POSIX. The candidate scope, if taken up, is Git Bash only. Not addressed because it cannot be verified without a Windows runner. Reopen when a Windows CI runner exists.
+- **No standalone start tool** (formerly #9). Background starts go through `bash` with `run_in_background`, which needs pi-bg to own `bash`. If another extension owns `bash`, pi-bg cannot start background tasks. Not addressed because no such conflict has been reported. Reopen when a user reports another extension owning `bash`; then register a `bg_start` tool only in that case.
+- **No persistence across resume, `/new`, fork or Pi processes** (formerly #2, option 2). Only `/reload` can keep tasks (`lifecycle.keepOnReload`, section 12); every other session shutdown kills all tasks, and ids in a resumed transcript refer to dead tasks. Not built on purpose: tasks that outlive their Pi process conflict with the no-orphans guarantee (section 12). Reopen when a user needs cross-process persistence, together with a security review of ownership and cleanup of the surviving processes.
+
+Deferred: persistence across resume, `/new`, fork and Pi processes (section 17.1).
