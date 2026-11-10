@@ -31,7 +31,7 @@ describe("startTask", () => {
     expect(e.reaper.watched).toEqual([[10_000, 10_000]]);
   });
 
-  it("on exit dispatches exit, clears timers, unwatches the reaper and calls onExit", async () => {
+  it("on exit dispatches exit, clears timers, keeps the reaper watching (#18) and calls onExit", async () => {
     const e = w6bEnv();
     e.runner.script([{ at: 10, exit: { code: 3, signal: null } }]);
     let exited: unknown;
@@ -44,7 +44,7 @@ describe("startTask", () => {
     expect(t.exitCode).toBe(3);
     expect(exited).toEqual({ code: 3, signal: null });
     expect(e.clock.pending()).toBe(0);
-    expect(e.reaper.unwatched).toEqual([10_000]);
+    expect(e.reaper.unwatched).toEqual([]); // the group may still hold a job started with `&`
   });
 
   it("refuses at maxRunningTasks with the task_limit text and creates no task", () => {

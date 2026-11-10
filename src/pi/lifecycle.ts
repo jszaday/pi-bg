@@ -47,8 +47,21 @@ function killGroupDefault(pgid: number): void {
   }
 }
 
-/** Synchronous last resort: SIGKILL every still-registered running task. Used after the 5 s bound and from the exit backstop. */
+/**
+ * Synchronous last resort: SIGKILL every still-registered running task, then the leftover members of finished tasks' groups
+ * (a job started with `&` outlives its task, #18; the handle ignores a group it saw empty, so a reused id is never signalled).
+ * Used after the 5 s bound and from the exit backstop.
+ */
 function hardKill(s: Services, killGroup: (pgid: number) => void): void {
+  const running = new Set(s.registry.running().map((t) => t.id));
+  for (const [id, rt] of s.runtime) {
+    if (running.has(id)) continue;
+    try {
+      rt.handle?.kill("kill");
+    } catch {
+      // handle already dead
+    }
+  }
   for (const t of s.registry.running()) {
     try {
       s.runtime.get(t.id)?.handle?.kill("kill");

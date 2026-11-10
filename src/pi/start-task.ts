@@ -124,7 +124,7 @@ export function startTask(s: Services, spec: TaskSpec, opts: StartOptions = {}):
 
   void handle.exited.then(async (info) => {
     clearTimers();
-    if (handle.pid !== undefined) s.reaper?.unwatch(handle.pid);
+    // The reaper keeps watching: a job started with `&` can outlive the task in its group (#18), and the watcher exits by itself once the group is empty.
     try {
       s.registry.dispatch(id, { type: "exit", code: info.code, signal: info.signal, at: s.clock.now() });
     } catch (e) {

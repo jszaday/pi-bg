@@ -292,7 +292,9 @@ Esc: aborting a turn while a task is foreground kills it (native semantics); onc
 
 Orphans (Claude Code #102511, #102009, #106483): with the Pi-ops adapter, Pi's tracked-pid cleanup on exit signals covers quit and SIGINT/SIGTERM; nothing covers SIGKILL or a crash of Pi, nor grandchildren outside the process group. With own-spawn the child leads its own process group, so the group-wide signal reaches grandchildren that stay in it. Residual risk (Pi killed by SIGKILL) is addressed by an optional reaper: a tiny detached POSIX shell watcher per task that polls `kill -0 <pi pid>` and, when Pi is gone and the group still has members, sends SIGKILL to the group (pi-bg-bash's design, up to 1 s lag). It needs the group id, so it exists only with the own-spawn adapter. It is executed: with a 0.2 s poll the group was gone 216 to 221 ms after a SIGKILL of Pi (eight runs), and the watcher exited by itself in every run (`test/adapters/reaper.test.ts`). Pid reuse is guarded by remembering groups already seen empty, never signalling them again.
 
-A process group alone does not cover daemons that `setsid` away; documented as a known limit shared by all surveyed extensions.
+Jobs left behind by a finished task (#18): a command such as `sleep 300 &` exits its shell, so the task is `exited` (unchanged), but the job stays in the task's process group. pi-bg does not kill it at task exit (users start servers that way on purpose); it is cleaned up when the session ends. Two pieces: (1) the reaper is not unwatched at task exit; its watcher exits by itself when the group is empty, so Pi crashing or being SIGKILLed still reaps the leftover job; (2) the shutdown hard kill, which also runs from the exit backstop, SIGKILLs the group of every task in the runtime table, not only running ones. The own-spawn handle stays responsible for the pgid guard: after the leader exits it polls the group every 0.5 s (unref'd) and marks it gone once empty, and a gone group is never signalled, so a recycled id is not hit at shutdown hours later. Alternatives rejected: killing leftovers at task exit (breaks the intended `&` use); a registry list of lingering pgids (new shared state, and the handle already owns the group's liveness). Leftover jobs get SIGKILL without a SIGTERM grace, and are not listed in `bg_status`; both are follow-ups.
+
+A process group alone does not cover daemons that `setsid` away; documented as a known limit shared by all surveyed extensions. A job started with `&` stays in the group and is covered (above).
 
 Resumed or reloaded sessions: ids in the transcript refer to dead tasks; `bg_status` on such an id answers with the cause and action (section 13). Persistence across resume is deferred (issue #2).
 
@@ -348,7 +350,7 @@ Failure modes of Claude Code and the guard (evidence: the issue numbers in the r
 |---|---|
 | Stale reminders re-firing, loops (#7479, #11716, #12302, #14968) | one-way notification status, no periodic reminders, single redelivery on proven loss (section 9) |
 | Output dir ignores TMPDIR, hardcoded `/tmp/claude` (#15700) | `os.tmpdir()`, config override, unit test with `TMPDIR` set |
-| Orphaned processes: survive SIGTERM or host crash (#102511, #102009, #106483) | process-group signalling, kill at every shutdown path, exit backstop, optional reaper |
+| Orphaned processes: survive SIGTERM or host crash (#102511, #102009, #106483) | process-group signalling, kill at every shutdown path (including jobs left by finished tasks), exit backstop, optional reaper |
 | A self-backgrounding command reported complete instantly (#93126) | exit is that of the process we spawned and its group leader; documented limit for double-forking daemons |
 | Uninterruptible blocking wait (#83817) | `bg_wait` returns on user message and Esc, never deaf (section 8) |
 | Raw output dumped into context (#76335) | bounded, normalized tails; `max_bytes`; cursors |

@@ -82,6 +82,7 @@ An invalid key is not fatal. pi-bg reports the key, the problem and the default 
 
 - `/reload`, `/new`, resume, fork and quit all stop every running background task. Tasks are not persisted across sessions.
 - The process group is the unit of cleanup. A process that starts its own session (`setsid`) leaves the group and survives `bg_kill` and shutdown.
+- A job a task starts with `&` (for example `sleep 300 &`) keeps running after the task shows `exited`; pi-bg leaves it alone until the session ends, then kills it (SIGKILL, no grace period), also after a Pi crash. It is not listed in `bg_status`.
 - If Pi is killed with SIGKILL or crashes, a small detached watcher per task kills the task's process group within about a second of Pi disappearing (see [DESIGN.md](https://github.com/jszaday/pi-bg/blob/main/DESIGN.md), section 12). Without the watcher (unavailable on the platform, or the fallback runner, which exposes no pid), such tasks can survive as orphans.
 - Output logs are written under the system temporary directory. Logs of finished tasks outlive the session and are removed after a retention period. A task whose log reaches the per-task cap stops writing to the log; it is not killed, and its in-memory tail keeps updating.
 - Windows is not supported.

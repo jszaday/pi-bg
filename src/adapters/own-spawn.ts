@@ -5,6 +5,9 @@ import type { ExitInfo, OutputSink, ProcessHandle, ProcessRunner, RunSpec } from
 /** After the shell exits, wait this long for stdio to end (a grandchild may hold the pipes) before resolving; same value as Pi's native tool. */
 const EXIT_STDIO_GRACE_MS = 100;
 
+/** After the leader exits with members left in its group (a job started with `&`), poll this often to notice the group emptying; from then on the group id is never signalled again. */
+const GROUP_POLL_MS = 500;
+
 export interface OwnSpawnOptions {
   shell: string;
   shellArgs: string[];
@@ -65,6 +68,12 @@ export function createOwnSpawnRunner(opts: OwnSpawnOptions): ProcessRunner & { r
       let killTimer: NodeJS.Timeout | undefined;
       let ended = 0;
       let groupGone = false;
+      let groupPoll: NodeJS.Timeout | undefined;
+      const markGone = () => {
+        groupGone = true;
+        if (groupPoll) clearInterval(groupPoll);
+        groupPoll = undefined;
+      };
       let info: ExitInfo = { code: null, signal: null };
       const finish = () => {
         if (settled) return;
@@ -91,6 +100,13 @@ export function createOwnSpawnRunner(opts: OwnSpawnOptions): ProcessRunner & { r
       child.once("exit", (code, signal) => {
         leaderExited = true;
         info = { code, signal };
+        // Members left behind (`sleep 300 &`) stay ours to kill until the group is seen empty; once it is, the id may be reused by an unrelated group.
+        const leader = child.pid;
+        if (leader === undefined || !groupAlive(leader)) markGone();
+        else {
+          groupPoll = setInterval(() => { if (!groupAlive(leader)) markGone(); }, GROUP_POLL_MS);
+          groupPoll.unref();
+        }
         if (ended >= 2) finish();
         else graceTimer = setTimeout(finish, EXIT_STDIO_GRACE_MS);
       });
@@ -102,7 +118,7 @@ export function createOwnSpawnRunner(opts: OwnSpawnOptions): ProcessRunner & { r
         exited,
         kill(mode) {
           // Never signal a group seen empty (its id could be reused). Stragglers after the leader exited are still ours to kill.
-          if (groupGone || (leaderExited && !groupAlive(pid))) { groupGone = true; return; }
+          if (groupGone || (leaderExited && !groupAlive(pid))) { markGone(); return; }
           if (mode === "kill") {
             if (killTimer) clearTimeout(killTimer);
             killTimer = undefined;
