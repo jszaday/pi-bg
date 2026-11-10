@@ -1,6 +1,7 @@
 // Pure view model for the shells panel (DESIGN "shells panel", issue #15): selection, scrolling,
 // key handling and plain-text rendering. No Pi, no node:*; the Pi layer truncates, styles and wires keys.
 import type { TaskId, TaskSummary } from "../contract.js";
+import { formatRuntime } from "./format.js";
 
 export type ShellsKey = "up" | "down" | "enter" | "escape" | "pageUp" | "pageDown" | "kill" | "other";
 export interface ShellsViewState {
@@ -16,15 +17,6 @@ export type FooterKey = "down" | "up" | "enter" | "escape" | "other";
 const NO_SHELLS = "No background shells.";
 const LIST_HINT = "↑↓ select · enter view · x kill · esc close";
 const DETAIL_HINT = "pgup/pgdn scroll · x kill · esc back";
-
-// TODO(#15): use format.ts formatRuntime once it is exported (owned by another stream)
-function formatRuntime(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${String(s % 60).padStart(2, "0")}s`;
-  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
-}
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 
