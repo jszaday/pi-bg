@@ -6,6 +6,7 @@ import {
   footerLabel,
   footerStep,
   initialView,
+  onOutputGrowth,
   reconcile,
   reduce,
   renderDetail,
@@ -131,6 +132,28 @@ describe("reduce, detail mode", () => {
     expect(reduce(detail(), "kill", ended, view).action).toEqual({ type: "none" });
     const s = detail();
     expect(reduce(s, "enter", rows, view)).toEqual({ state: s, action: { type: "none" } });
+  });
+});
+
+describe("onOutputGrowth", () => {
+  it("a paused detail view moves up by the added lines to keep the same lines", () => {
+    expect(onOutputGrowth(detail({ follow: false, scroll: 5 }), 3, 53, 10)).toMatchObject({ follow: false, scroll: 8 });
+  });
+  it("clamps to the maximum scroll", () => {
+    expect(onOutputGrowth(detail({ follow: false, scroll: 40 }), 3, 50, 10).scroll).toBe(40);
+  });
+  it("leaves a following detail view unchanged", () => {
+    const s = detail();
+    expect(onOutputGrowth(s, 3, 53, 10)).toBe(s);
+  });
+  it("leaves list mode unchanged", () => {
+    const s: ShellsViewState = { ...list("bg1"), follow: false, scroll: 5 };
+    expect(onOutputGrowth(s, 3, 53, 10)).toBe(s);
+  });
+  it("ignores no growth and shrinkage", () => {
+    const s = detail({ follow: false, scroll: 5 });
+    expect(onOutputGrowth(s, 0, 50, 10)).toBe(s);
+    expect(onOutputGrowth(s, -2, 48, 10)).toBe(s);
   });
 });
 

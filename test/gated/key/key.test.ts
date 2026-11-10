@@ -79,6 +79,7 @@ async function launch(command: string, extra: Record<string, unknown> = {}) {
 }
 
 describe.skipIf(!!skip)("live move key (real pi CLI in tmux, real pi-bg)", () => {
+  // TODO(#15): gated tmux test for the shells panel (footer Down focus, Enter opens, x kills) — not written; tmux was unavailable on the build machine
   it("ctrl+b while a sleep 30 tool runs moves it to the background; the agent continues", async () => {
     const { tmux, screen } = await launch("sleep 3137; echo finished");
     tmux("send-keys", "-t", "k", "-l", "go");

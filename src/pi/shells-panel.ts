@@ -6,7 +6,7 @@ import type { Clock, TaskId, TaskSummary, TimerHandle } from "../contract.js";
 import { killText, type KillResult } from "../core/format.js";
 import type { TaskRegistry } from "../core/registry.js";
 import {
-  initialView, reconcile, reduce, renderDetail, renderList, shellRows,
+  initialView, onOutputGrowth, reconcile, reduce, renderDetail, renderList, shellRows,
   type ShellsKey, type ShellsViewState,
 } from "../core/shells-view.js";
 
@@ -82,10 +82,23 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
             let redrawTimer: TimerHandle | undefined;
             let tickTimer: TimerHandle | undefined;
 
+            let seen: { id: TaskId; lines: number } | undefined; // output length last accounted for
+            const trackGrowth = (): void => {
+              const row = view.mode === "detail" ? selected() : undefined;
+              if (!row) {
+                seen = undefined;
+                return;
+              }
+              const lines = outputOf().length;
+              // TODO(#15): paused detail view drifts once the 500-line tail window is full; needs a line counter from the runtime tail
+              if (seen && seen.id === row.id) view = onOutputGrowth(view, lines - seen.lines, lines, bodyHeight());
+              seen = { id: row.id, lines };
+            };
             const sync = (): void => {
               const next = rowsNow();
               view = reconcile(view, next, rows);
               rows = next;
+              trackGrowth();
             };
             const redrawSoon = (): void => {
               if (redrawTimer !== undefined) return;
@@ -150,11 +163,13 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
               },
               invalidate(): void {},
               handleInput(data: string): void {
+                trackGrowth(); // bring the scroll up to date before the key moves it
                 const { state, action } = reduce(view, toKey(data), rows, {
                   outputLines: view.mode === "detail" ? outputOf().length : 0,
                   height: bodyHeight(),
                 });
                 view = state;
+                trackGrowth(); // baseline after entering detail or leaving it
                 if (action.type === "close") panel.close();
                 else if (action.type === "kill") {
                   const report = (msg: string): void => ctx.ui.notify(msg, "error");

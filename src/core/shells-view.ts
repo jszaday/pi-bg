@@ -60,6 +60,16 @@ function scrollBy(s: ShellsViewState, delta: number, outputLines: number, height
   return { ...s, scroll, follow: scroll === 0 };
 }
 
+/**
+ * Output grew by `added` lines (`outputLines` is the new total). A paused detail view counts lines above the
+ * bottom, so it moves up by `added` to keep showing the same lines; following and list mode are unchanged.
+ */
+export function onOutputGrowth(s: ShellsViewState, added: number, outputLines: number, height: number): ShellsViewState {
+  if (s.mode !== "detail" || s.follow || added <= 0) return s;
+  const scroll = clamp(s.scroll + added, 0, Math.max(0, outputLines - height));
+  return scroll === s.scroll ? s : { ...s, scroll };
+}
+
 export function reduce(
   s: ShellsViewState,
   key: ShellsKey,

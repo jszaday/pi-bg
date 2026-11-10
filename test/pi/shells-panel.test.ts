@@ -108,6 +108,26 @@ describe("shells panel", () => {
     expect(t.lines().at(-2)).toBe("line 100");
   });
 
+  it("a paused detail view keeps its visible lines as output arrives; a following one tracks the newest", () => {
+    const out = Array.from({ length: 100 }, (_, i) => `line ${i}`);
+    const t = setup(out);
+    t.bg();
+    t.pi.ui.tui.terminal.rows = 20; // body height 13
+    t.panel.open(t.ctx);
+    t.pi.ui.typeKey(ENTER);
+    t.pi.ui.typeKey(UP);
+    const paused = t.lines();
+    expect(paused.at(-2)).toBe("line 98");
+    out.push("line 100", "line 101");
+    t.clock.advance(1000); // tick syncs
+    expect(t.lines().slice(2)).toEqual(paused.slice(2)); // header runtime ticks, the body must not move
+    t.pi.ui.typeKey(PGDN);
+    expect(t.lines().at(-2)).toBe("line 101");
+    out.push("line 102");
+    t.clock.advance(1000);
+    expect(t.lines().at(-2)).toBe("line 102");
+  });
+
   it("x kills the selected background task and passes through nothing else", () => {
     const t = setup();
     const a = t.bg();
