@@ -4,6 +4,7 @@
 
 - Added: `bash` takes `stdin: true` to give a command a writable stdin, and the new `bg_write` tool writes to it (up to 64 KiB per call; `eof` closes stdin). Without `stdin` a task's stdin stays closed as before; the fallback runner rejects `stdin`, and writing to a task without stdin or one that has ended returns an explanation (#6).
 - Fixed: a long session no longer keeps an output ring for every finished task; only the newest 50 do, and `bg_status` and `bg_output` read older tasks from their log files (#12).
+- Added: setting `lifecycle.keepOnReload` (default `false`): when `true`, `/reload` keeps running background tasks alive and the reloaded extension adopts them; quit, `/new`, resume, fork and Pi crashes still stop every task (#2).
 - Security: the default log directory (`<tmpdir>/pi-bg-<uid>`) is now checked before use: a symbolic link, a non-directory or a directory owned by another user is refused with a message naming the fix, and a loose mode on our own directory is tightened to 0700 (#22).
 - Added: `bg_kill` takes an optional `signal` (`INT`, `HUP`, `TERM`, `QUIT`, `USR1`, `USR2` or `KILL`; default `TERM`) for programs that shut down cleanly only on one of them; SIGKILL still follows after the grace period unless `KILL` is chosen. The fallback runner accepts only `KILL` and rejects other signals with an explanation (#10).
 - Fixed: session shutdown now ends an active `bg_wait` (result `aborted`) and clears its timer instead of leaving it running (#13).

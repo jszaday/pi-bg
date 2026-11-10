@@ -21,6 +21,7 @@ import { installMoveKey } from "./pi/input.js";
 import { killTasks } from "./pi/kill.js";
 import { installLifecycle } from "./pi/lifecycle.js";
 import { createNotificationSink, installNotifyHandlers } from "./pi/notify.js";
+import { keepForReload, takeKept } from "./pi/reload-slot.js";
 import { registerNotificationRenderer } from "./pi/renderer.js";
 import type { Services, TaskRuntime } from "./pi/runtime.js";
 import { createUi } from "./pi/ui.js";
@@ -42,8 +43,11 @@ export default function piBg(pi: ExtensionAPI): void {
     get seed() { return alloc.seed; },
   };
   const clock = systemClock;
-  const registry = new TaskRegistry({ clock, ids });
-  const runtime = new Map<TaskId, TaskRuntime>();
+  // Tasks kept by the previous instance across /reload (keepOnReload, #2) are adopted with the registry that owns them.
+  const kept = takeKept();
+  const registry = kept?.registry ?? new TaskRegistry({ clock, ids });
+  const runtime = kept?.runtime ?? new Map<TaskId, TaskRuntime>();
+  const reseed = kept?.reseed ?? ((seed: number) => { alloc = createIdAllocator(Math.max(seed, lastIssued)); });
   const ctxRef: Services["ctx"] = {};
   const sessionId = () => {
     try {
@@ -105,7 +109,7 @@ export default function piBg(pi: ExtensionAPI): void {
     get maxWaitMs() { return config.wait.maxTimeoutSeconds * 1000; },
     confirmQueued: () => ctxRef.current?.hasPendingMessages?.(),
   });
-  registry.subscribe((t, ev, applied) => {
+  const unsubscribeRegistry = registry.subscribe((t, ev, applied) => {
     notify.onTaskEvent(t, ev, applied);
     waits.onTaskEvent(t, ev, applied);
   });
@@ -142,7 +146,12 @@ export default function piBg(pi: ExtensionAPI): void {
   installInputHandler(pi, s);
   installNotifyHandlers(pi, notify);
   const lifecycle = installLifecycle(pi, s, {
-    reseed: (seed) => { alloc = createIdAllocator(Math.max(seed, lastIssued)); },
+    reseed,
+    adopted: kept?.release,
+    retain: (release) => {
+      unsubscribeRegistry(); // the next instance subscribes its own notify and wait coordinator
+      keepForReload({ registry, runtime, reseed, release });
+    },
     setConfig: (c) => { config = c; runnerCache = undefined; storeCache = undefined; },
     bash: () => bash,
     installKey: (ctx, k) => installMoveKey(ctx, { registry, ...k }),

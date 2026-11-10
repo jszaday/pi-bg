@@ -15,6 +15,7 @@ export const DEFAULT_CONFIG: BgConfig = {
   output: { tailLines: 50, maxBytes: 16_000, ringBytes: 65_536, maxLogBytes: 268_435_456, logRetentionDays: 7, logDir: null },
   maxRunningTasks: 16,
   kill: { termGraceMs: 3000 },
+  lifecycle: { keepOnReload: false },
 };
 
 type Rule =
@@ -44,9 +45,10 @@ const RULES: Record<string, Rule> = {
   "output.logDir": { kind: "nullableString" },
   maxRunningTasks: { kind: "num", min: 1, int: true },
   "kill.termGraceMs": { kind: "num", min: 0 },
+  "lifecycle.keepOnReload": { kind: "bool" },
 };
 
-const SECTIONS = new Set(["notify", "wait", "output", "kill"]);
+const SECTIONS = new Set(["notify", "wait", "output", "kill", "lifecycle"]);
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);

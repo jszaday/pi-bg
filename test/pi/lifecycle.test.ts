@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskId } from "../../src/contract.js";
 import { installLifecycle, killAll, shutdownBoundMs, type LifecycleDeps } from "../../src/pi/lifecycle.js";
 import { FakePi } from "../fakes/index.js";
-import { w8Ctx, w8Services, w8Task } from "./w8-helpers.js";
+import { w8Ctx, w8Services, w8Spec, w8Task } from "./w8-helpers.js";
 
 const killTasksMock = vi.hoisted(() => vi.fn());
 vi.mock("../../src/pi/kill.js", () => ({ killTasks: killTasksMock }));
@@ -231,6 +231,84 @@ describe("session_shutdown", () => {
     await start(x);
     await x.pi.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
     expect(killTasksMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("session_shutdown with lifecycle.keepOnReload (#2)", () => {
+  const shutdown = (x: ReturnType<typeof setup>, reason: string) => x.pi.emit("session_shutdown", { type: "session_shutdown", reason });
+  const keepSetup = (over: Partial<LifecycleDeps> = {}) => {
+    const retained: (() => void)[] = [];
+    const x = setup({ retain: (release) => void retained.push(release), ...over });
+    x.h.config.lifecycle.keepOnReload = true;
+    return { ...x, retained };
+  };
+
+  it("keeps background tasks on reload: no kill, logs and hard-timeout timers kept, wait ended, state handed over", async () => {
+    const x = keepSetup();
+    await start(x);
+    const t = w8Task(x.h);
+    const timer = x.h.clock.setTimeout(() => {}, 1000);
+    x.h.s.runtime.get(t.id)!.timers.push(timer);
+    const closed = vi.fn(async () => {});
+    x.h.s.runtime.get(t.id)!.log = { close: closed, write() {}, path: "p", degraded: null };
+    const p = x.h.s.waits.wait({ ids: [t.id], mode: "any", timeoutMs: 60_000 }, undefined);
+    await shutdown(x, "reload");
+    expect((await p).reason).toBe("aborted");
+    expect(killTasksMock).not.toHaveBeenCalled();
+    expect(closed).not.toHaveBeenCalled();
+    expect(x.h.clock.pending()).toBe(1); // only the task's own timer; the wait timer is gone
+    expect(x.retained).toHaveLength(1);
+    expect(x.calls.uiDispose).toBe(1);
+    expect(x.calls.keyUnsub).toBe(1);
+    expect(x.proc.listeners.size).toBe(1); // backstop stays until the next instance releases it
+    x.retained[0]!();
+    expect(x.proc.listeners.size).toBe(0);
+  });
+
+  it("a session_start with an adopted release removes the previous backstop", async () => {
+    const release = vi.fn();
+    const x = setup({ adopted: release });
+    await start(x);
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  for (const reason of ["quit", "new", "resume", "fork"]) {
+    it(`still kills everything on ${reason} even with keepOnReload on (no-orphans guarantee)`, async () => {
+      const x = keepSetup();
+      await start(x);
+      w8Task(x.h);
+      await shutdown(x, reason);
+      expect(killTasksMock).toHaveBeenCalledWith(x.h.s, "all", "shutdown");
+      expect(x.retained).toHaveLength(0);
+      expect(x.proc.listeners.size).toBe(0);
+    });
+  }
+
+  it("kills on reload when keepOnReload is off (default)", async () => {
+    const x = keepSetup();
+    x.h.config.lifecycle.keepOnReload = false;
+    await start(x);
+    w8Task(x.h);
+    await shutdown(x, "reload");
+    expect(killTasksMock).toHaveBeenCalledWith(x.h.s, "all", "shutdown");
+    expect(x.retained).toHaveLength(0);
+  });
+
+  it("kills on reload when a running task is still foreground", async () => {
+    const x = keepSetup();
+    await start(x);
+    w8Task(x.h);
+    x.h.registry.create(w8Spec({ startInBackground: false }));
+    await shutdown(x, "reload");
+    expect(killTasksMock).toHaveBeenCalledWith(x.h.s, "all", "shutdown");
+    expect(x.retained).toHaveLength(0);
+  });
+
+  it("with no running task a reload takes the normal path (nothing to hand over)", async () => {
+    const x = keepSetup();
+    await start(x);
+    await shutdown(x, "reload");
+    expect(x.retained).toHaveLength(0);
   });
 });
 

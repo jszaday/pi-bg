@@ -82,7 +82,7 @@ An invalid key is not fatal. pi-bg reports the key, the problem and the default 
 
 ## Limits
 
-- `/reload`, `/new`, resume, fork and quit all stop every running background task. Tasks are not persisted across sessions.
+- `/new`, resume, fork and quit stop every running background task, and so does `/reload` unless you set `lifecycle.keepOnReload` to `true` in `pi-bg.json`: then background tasks keep running through a reload and are available again afterwards (a task still in the foreground is stopped). Tasks are never persisted across Pi restarts.
 - The process group is the unit of cleanup. A process that starts its own session (`setsid`) leaves the group and survives `bg_kill` and shutdown.
 - A job a task starts with `&` (for example `sleep 300 &`) keeps running after the task shows `exited`; pi-bg leaves it alone until the session ends, then kills it (SIGKILL, no grace period), also after a Pi crash. It is not listed in `bg_status`.
 - If Pi is killed with SIGKILL or crashes, a small detached watcher per task kills the task's process group within about a second of Pi disappearing (see [DESIGN.md](https://github.com/jszaday/pi-bg/blob/main/DESIGN.md), section 12). Without the watcher (unavailable on the platform, or the fallback runner, which exposes no pid), such tasks can survive as orphans.
