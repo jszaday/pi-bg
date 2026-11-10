@@ -1,0 +1,48 @@
+name: Gated
+
+# Full gated (live) suite, including the real Pi CLI in tmux. Weekly and on demand; the faux-provider subset also runs on every push and PR in ci.yml.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gated-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+        timeout-minutes: 5
+      - name: Install tmux
+        timeout-minutes: 5
+        run: sudo apt-get update && sudo apt-get install -y tmux
+      # Install the same Pi version the lockfile pins, read at job time so it cannot go stale.
+      - name: Install Pi CLI
+        timeout-minutes: 5
+        run: |
+          v=$(node -p "require('./package-lock.json').packages['node_modules/@earendil-works/pi-coding-agent'].version")
+          echo "installing Pi $v"
+          npm install -g "@earendil-works/pi-coding-agent@$v"
+          command -v pi
+      # Suites skip silently when a prerequisite is missing, so fail on any SKIPPED notice rather than report a vacuous pass.
+      - name: Run full gated suite
+        timeout-minutes: 15
+        env:
+          PI_BG_GATED: "1"
+        run: |
+          npm run test:gated > gated.log 2>&1; rc=$?
+          cat gated.log
+          if grep -q 'SKIPPED' gated.log; then echo "::error::a gated suite was skipped; check tmux and the Pi CLI"; exit 1; fi
+          exit $rc

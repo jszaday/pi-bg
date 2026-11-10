@@ -19,6 +19,8 @@ npm run check
 
 `npm run check` runs the typecheck and the unit tests. Tests that need a real Pi are skipped by default (`npm run test:gated` runs them). A skipped test is not a pass: say in the pull request what skipped and why.
 
+The gated suite runs the extension against a real Pi session (in-process faux provider, plus the real `pi` CLI in tmux for `test/gated/key`). CI runs the faux-provider part on every push and pull request in the non-required `gated` job, and the full suite weekly in `gated.yml`. Run it locally with `npm run test:gated` (needs `pgrep`, and tmux plus a `pi` on `PATH` or `PI_BIN` for the key test).
+
 ## Issues and logs
 
 Scrub tokens, API keys, credentials and personal paths from every log, screenshot or command output you paste into an issue or pull request, and never include them even in part. Review what you are about to publish, including commit metadata. If you pasted a credential by accident, revoke it and do not repeat it publicly.

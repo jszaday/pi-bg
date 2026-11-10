@@ -45,3 +45,26 @@ jobs:
         timeout-minutes: 5
       - run: npm test
         timeout-minutes: 10
+
+  # Not a required check. Runs the gated suites that need only npm ci and pgrep (in-process faux provider, real AgentSession); the tmux suite runs weekly in gated.yml.
+  gated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+        timeout-minutes: 5
+      # Suites skip silently when the Pi SDK is missing, so fail on any SKIPPED notice rather than report a vacuous pass.
+      - name: Run gated suites (faux provider)
+        timeout-minutes: 10
+        env:
+          PI_BG_GATED: "1"
+        run: |
+          npx vitest run --config test/gated/vitest.config.ts test/gated/handoff test/gated/wait test/gated/notify test/gated/shutdown > gated.log 2>&1; rc=$?
+          cat gated.log
+          if grep -q 'SKIPPED' gated.log; then echo "::error::a gated suite was skipped; check that the Pi SDK is installed"; exit 1; fi
+          exit $rc
