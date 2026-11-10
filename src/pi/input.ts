@@ -1,7 +1,7 @@
 // Move key (DESIGN section 7): one terminal-input listener, TUI mode only.
 // Shells panel focus (DESIGN "shells panel", #15): a second listener, installed only when a panel is given.
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { matchesKey, type KeyId } from "@earendil-works/pi-tui";
+import { isKeyRelease, matchesKey, type KeyId } from "@earendil-works/pi-tui";
 import type { TaskId } from "../contract.js";
 import type { TaskRegistry } from "../core/registry.js";
 import { footerStep, type FooterKey } from "../core/shells-view.js";
@@ -67,6 +67,7 @@ export function installMoveKey(
   });
 
   const unsubscribeFocus = ctx.ui.onTerminalInput((data) => {
+    if (isKeyRelease(data)) return undefined; // Pi hands listeners kitty releases too; only presses move focus
     const key = footerKey(data);
     const count = backgroundCount();
     // Focus starts only on Down and every focused key needs the editor to own the keyboard.

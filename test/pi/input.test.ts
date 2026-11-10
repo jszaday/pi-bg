@@ -1,3 +1,4 @@
+import { isKeyRelease } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 import { installMoveKey } from "../../src/pi/input.js";
 import type { ShellsPanel } from "../../src/pi/shells-panel.js";
@@ -126,6 +127,16 @@ describe("installMoveKey shells focus (#15)", () => {
     t.bg();
     expect(t.pi.ui.typeKey(DOWN)).toBe(true);
     expect(t.shells.setFooterFocus).toHaveBeenLastCalledWith(true);
+  });
+
+  it("ignores a kitty key release of Down: no focus, no consume", () => {
+    const t = focusSetup();
+    t.bg();
+    const release = "\x1b[1;1:3B";
+    expect(isKeyRelease(release)).toBe(true);
+    expect(t.pi.ui.typeKey(release)).toBe(false);
+    expect(t.shells.setFooterFocus).not.toHaveBeenCalled();
+    expect(t.pi.ui.typeKey(DOWN)).toBe(true); // negative control: the press still focuses
   });
 
   it("captures the TUI through a zero-line widget", () => {

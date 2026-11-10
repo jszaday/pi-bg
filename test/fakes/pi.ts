@@ -37,6 +37,9 @@ export interface FakeUi {
   focused: unknown;
   editor: { isShowingAutocomplete(): boolean };
   overlays: FakeOverlay[];
+  // When true, custom() holds the factory call until runDeferredCustom(), as Pi does when it has not yet shown the component.
+  deferCustom: boolean;
+  runDeferredCustom(): void;
   statuses: { key: string; text: string | undefined }[];
   notices: { msg: string; level: "info" | "warning" | "error" | undefined }[];
   // Registered terminal input listeners, in registration order.
@@ -72,10 +75,15 @@ type Handler = (payload: unknown, ctx: FakeCtx) => unknown;
 
 function createUi(): FakeUi {
   const editor = { isShowingAutocomplete: () => false };
+  const deferred: (() => void)[] = [];
   const ui: FakeUi = {
     widgets: [],
     widgetComponents: new Map(),
     overlays: [],
+    deferCustom: false,
+    runDeferredCustom() {
+      for (const run of deferred.splice(0)) run();
+    },
     editor,
     focused: editor,
     tui: {
@@ -112,8 +120,12 @@ function createUi(): FakeUi {
         overlay.component.dispose?.();
         finish(r);
       };
-      overlay.component = factory(ui.tui, fakeTheme, undefined, done);
-      ui.overlays.push(overlay);
+      const run = (): void => {
+        overlay.component = factory(ui.tui, fakeTheme, undefined, done);
+        ui.overlays.push(overlay);
+      };
+      if (ui.deferCustom) deferred.push(run);
+      else run();
       return result;
     },
     setStatus(key, text) {

@@ -50,6 +50,7 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
   let active = false; // set at open(), before Pi has run the factory
   let done: (() => void) | undefined;
   let cleanup: (() => void) | undefined;
+  let pending: { cancelled: boolean } | undefined; // the open() whose factory Pi has not run yet
 
   const stop = (): void => {
     const c = cleanup;
@@ -64,6 +65,12 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
       const d = done;
       stop();
       d?.();
+      if (!d && pending) {
+        // Closed before Pi ran the factory: the factory will finish at once, and the panel is not open meanwhile.
+        pending.cancelled = true;
+        pending = undefined;
+        active = false;
+      }
     },
     dispose(): void {
       panel.close();
@@ -72,11 +79,19 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
       if (active) return;
       active = true;
       let closed = false;
+      const request = { cancelled: false };
+      pending = request;
       void ctx.ui
         .custom<void>(
           (tui, theme, _kb, finish) => {
+            if (pending === request) pending = undefined;
+            if (request.cancelled) {
+              void Promise.resolve().then(() => finish()); // closed before Pi showed it: dismiss at once
+              return { render: () => [], invalidate: () => {} };
+            }
             const rowsNow = (): TaskSummary[] =>
               shellRows(deps.registry.list().map((t) => deps.registry.summarize(t, deps.tailOf(t.id, 1))));
+            // TODO(#15): released tasks show no output; fall back to the log file read used by the bg tail path
             let rows = rowsNow();
             let view: ShellsViewState = initialView(rows);
             let redrawTimer: TimerHandle | undefined;
@@ -194,9 +209,13 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
           { overlay: true, overlayOptions: { width: "80%", minWidth: 40, maxHeight: "80%", anchor: "center" } },
         )
         .then(
-          () => stop(),
+          () => {
+            stop();
+            if (pending === request) pending = undefined;
+          },
           (e: unknown) => {
             stop();
+            if (pending === request) pending = undefined;
             active = false;
             ctx.ui.notify(`Could not open the shells panel: ${e instanceof Error ? e.message : String(e)}. Action: use /bg list instead.`, "error");
           },
