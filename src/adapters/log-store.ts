@@ -12,6 +12,22 @@ export function resolveBaseDir(logDir: string | null): string {
   return join(tmpdir(), `pi-bg-${uid}`);
 }
 
+/** Checks the default base directory is a real directory we own; tightens a loose mode. Returns an error message, or undefined when it is safe to use. */
+function verifyPrivateBase(dir: string): string | undefined {
+  const st = nodeFs.lstatSync(dir);
+  if (st.isSymbolicLink()) {
+    return `Refusing to use log directory ${dir}: it is a symbolic link, so another user may control where logs are written. Remove it, or set output.logDir to a directory you own.`;
+  }
+  if (!st.isDirectory()) {
+    return `Refusing to use log directory ${dir}: it is not a directory. Remove it, or set output.logDir to a directory you own.`;
+  }
+  if (typeof process.getuid === "function" && st.uid !== process.getuid()) {
+    return `Refusing to use log directory ${dir}: it is owned by another user (uid ${st.uid}), who could read or replace the logs. Remove it if you can, or set output.logDir to a directory you own.`;
+  }
+  if ((st.mode & 0o077) !== 0) nodeFs.chmodSync(dir, 0o700);
+  return undefined;
+}
+
 const ID_RE = /^[A-Za-z0-9_-]+$/;
 const fileName = (id: string, s: StreamName) => (s === "combined" ? `${id}.log` : `${id}.${s}.log`);
 
@@ -32,9 +48,13 @@ export function createFsLogStore(opts: { baseDir: string; sessionId: string; max
   function ensureDir(): string | undefined {
     if (dirReady) return undefined;
     try {
-      for (const d of [opts.baseDir, sessionDir]) {
-        nodeFs.mkdirSync(d, { recursive: true, mode: 0o700 });
+      nodeFs.mkdirSync(opts.baseDir, { recursive: true, mode: 0o700 });
+      // Only the default directory under the shared temp dir can be pre-created by another user; a configured logDir is the user's own choice.
+      if (opts.baseDir === resolveBaseDir(null)) {
+        const unsafe = verifyPrivateBase(opts.baseDir);
+        if (unsafe) return unsafe;
       }
+      nodeFs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
       nodeFs.chmodSync(sessionDir, 0o700);
       nodeFs.writeFileSync(join(sessionDir, "owner.pid"), String(process.pid), { mode: 0o600 });
       dirReady = true;

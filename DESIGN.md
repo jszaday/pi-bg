@@ -266,7 +266,7 @@ pi-bg-bash and pi-wake-jobs both ship re-arm/hold logic for this problem, eviden
 
 ## 10. Output storage (R5)
 
-Each task writes its raw combined output (and, with a splitting runner, separate stdout and stderr files) to a log. Location: `output.logDir` or, by default, `<os.tmpdir()>/pi-bg-<uid>/<sessionId>/<taskId>.log`. `os.tmpdir()` honors `TMPDIR` (Claude Code's #15700 failure was a hardcoded `/tmp/claude`); no path is hardcoded and a unit test sets `TMPDIR`. Directories are 0700 and files 0600 (pi-bg-bash; logs may contain secrets). Log paths are put in every result so the user and the model can open them with `read`; nothing is hidden state.
+Each task writes its raw combined output (and, with a splitting runner, separate stdout and stderr files) to a log. Location: `output.logDir` or, by default, `<os.tmpdir()>/pi-bg-<uid>/<sessionId>/<taskId>.log`. `os.tmpdir()` honors `TMPDIR` (Claude Code's #15700 failure was a hardcoded `/tmp/claude`); no path is hardcoded and a unit test sets `TMPDIR`. Directories are 0700 and files 0600 (pi-bg-bash; logs may contain secrets). The default base directory is verified before use because another local user could pre-create it on a shared temp dir: a symlink, non-directory or foreign owner is refused with no fallback (a fallback would hide the attack), and a loose mode on our own directory is chmod'ed to 0700; a configured `output.logDir` is not checked. Log paths are put in every result so the user and the model can open them with `read`; nothing is hidden state.
 
 In memory, each task keeps a bounded ring of recent output (`output.ringBytes`) for cheap tails, notification excerpts. Deep reads (`since`, grep, large tails) go to the file by byte offset through the `LogStore` port.
 

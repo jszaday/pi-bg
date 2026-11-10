@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Security: the default log directory (`<tmpdir>/pi-bg-<uid>`) is now checked before use: a symbolic link, a non-directory or a directory owned by another user is refused with a message naming the fix, and a loose mode on our own directory is tightened to 0700 (#22).
+
 ## 0.1.1 - 2026-11-09
 
 - Fixed: a background job started with `&` inside a task is now killed at session shutdown and after a Pi crash, instead of surviving as an orphan (#18).

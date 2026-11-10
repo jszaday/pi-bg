@@ -1,11 +1,11 @@
 import * as fs from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFsLogStore, resolveBaseDir } from "../../src/adapters/index.js";
 import type { LogWriter } from "../../src/contract.js";
 import { cleanup, tmp } from "./helpers.js";
 
-afterEach(cleanup);
+afterEach(() => { vi.restoreAllMocks(); cleanup(); });
 const mode = (p: string) => fs.statSync(p).mode & 0o777;
 const open = (s: ReturnType<typeof createFsLogStore>, id = "bg1"): LogWriter => {
   const w = s.open(id);
@@ -69,6 +69,59 @@ describe("fs log store", () => {
     } finally {
       if (old === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = old;
     }
+  });
+
+  describe("default base directory verification", () => {
+    const withTmpdir = <T>(fn: (base: string) => T): T => {
+      const old = process.env.TMPDIR;
+      process.env.TMPDIR = tmp();
+      try { return fn(resolveBaseDir(null)); } finally { if (old === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = old; }
+    };
+    const openDefault = (base: string) => createFsLogStore({ baseDir: base, sessionId: "s", maxLogBytes: 1e6 }).open("bg1");
+
+    it("tightens a loose mode on our own directory to 0700", () => {
+      withTmpdir((base) => {
+        fs.mkdirSync(base, { mode: 0o755 });
+        fs.chmodSync(base, 0o755);
+        expect("error" in openDefault(base)).toBe(false);
+        expect(mode(base)).toBe(0o700);
+      });
+    });
+
+    it("refuses a symbolic link and writes nothing through it", () => {
+      withTmpdir((base) => {
+        const target = tmp();
+        fs.symlinkSync(target, base);
+        const r = openDefault(base) as { error: string };
+        expect(r.error).toMatch(/symbolic link.*output\.logDir/);
+        expect(fs.readdirSync(target)).toEqual([]);
+      });
+    });
+
+    it("refuses a directory owned by another user", () => {
+      if (typeof process.getuid !== "function") return;
+      const real = process.getuid();
+      vi.spyOn(process, "getuid").mockReturnValue(real + 1); // the default path embeds the uid, so it is created by us but looks foreign
+      withTmpdir((base) => {
+        fs.mkdirSync(base, { mode: 0o700 });
+        expect((openDefault(base) as { error: string }).error).toMatch(/owned by another user.*output\.logDir/);
+      });
+    });
+
+    it("refuses a non-directory", () => {
+      withTmpdir((base) => {
+        fs.writeFileSync(base, "x");
+        expect((openDefault(base) as { error: string }).error).toMatch(/Cannot create log directory|not a directory/);
+      });
+    });
+
+    it("does not check a configured directory (loose mode is left alone)", () => {
+      const base = join(tmp(), "mine");
+      fs.mkdirSync(base, { mode: 0o755 });
+      fs.chmodSync(base, 0o755);
+      expect("error" in createFsLogStore({ baseDir: base, sessionId: "s", maxLogBytes: 1e6 }).open("bg1")).toBe(false);
+      expect(mode(base)).toBe(0o755);
+    });
   });
 
   it("unwritable directory: open returns an error with cause and action", () => {

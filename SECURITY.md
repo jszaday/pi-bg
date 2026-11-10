@@ -22,7 +22,7 @@ In scope:
 
 - Process-group kill and the detached reaper: signalling a process group other than the task's own, or the reaper killing a process it should not.
 - Project-config trust: `.pi/pi-bg.json` must be read only when Pi has trusted the project, and an untrusted project's file must be ignored.
-- Log files under the system temporary directory: directories are created with mode 0700 and files with mode 0600. Logs hold the raw output of the task, which may contain secrets, and finished-task logs persist until retention cleanup. A way to read another user's logs, or to make pi-bg write or delete outside its own log directories, is in scope.
+- Log files under the system temporary directory: directories are created with mode 0700 and files with mode 0600, and the default base directory is refused if it is a symbolic link or owned by another user. Logs hold the raw output of the task, which may contain secrets, and finished-task logs persist until retention cleanup. A way to read another user's logs, or to make pi-bg write or delete outside its own log directories, is in scope.
 
 Out of scope:
 
