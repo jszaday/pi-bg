@@ -57,7 +57,15 @@ Ask the agent: "Start the dev server in the background, then check that it came 
 
 ## Commands
 
-`/bg` lists tasks and shows the tail of one (`/bg tail <id>`). It also stops tasks (`/bg kill <id>` or `/bg kill all`), sets the session timeout and notification level (`/bg timeout <s>`, `/bg notify <level>`) for the current session only, and moves the running command to the background (`/bg move`). `/bg help` lists the subcommands.
+`/bg` with no argument opens the shells panel in the terminal UI (see Shells panel below); `/bg list` prints the tasks as text, which is also what `/bg` does in RPC, print and json modes. `/bg tail <id>` shows the tail of one task. It also stops tasks (`/bg kill <id>` or `/bg kill all`), sets the session timeout and notification level (`/bg timeout <s>`, `/bg notify <level>`) for the current session only, and moves the running command to the background (`/bg move`). `/bg help` lists the subcommands.
+
+## Shells panel
+
+The footer shows `N shells` while background tasks run. When the editor is empty, press Down to highlight that count (reverse video), then Enter to open the shells panel; Esc or Up clears the highlight, and any other key clears it and goes to the editor as usual. `/bg` with no argument opens the same panel.
+
+The panel lists every background task with its id, state, runtime, command and last output line. Up, Down, PageUp and PageDown select a task. Enter shows its live output, which follows new output; scrolling with the arrow or page keys pauses following, and scrolling back to the bottom resumes it. `x` kills the selected running shell at once, like `/bg kill`. Esc goes back to the list, and closes the panel from the list.
+
+Down is captured only when pi-bg can tell that the editor itself has focus, so it never takes the key from a dialog, an overlay or the autocomplete menu; with a custom editor, Down is left alone. This has not yet been run against a real Pi; it rests on reading Pi 1.5.1 source (DESIGN.md sections 2 and 14).
 
 ## Keys
 
