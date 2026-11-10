@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-11-10
 
 - Changed: the shells panel lists running shells first, then finished ones, newest first within each group, the same order `bg_status` uses.
 - Changed: the shells panel is drawn as a rounded box with themed border, an accent marker and highlighted background on the selected row, and a dim hint line; the detail output area is three lines shorter to make room for the frame.

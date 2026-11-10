@@ -6,7 +6,7 @@ Background tasks for the [Pi coding agent](https://github.com/earendil-works/pi)
 
 ## Status
 
-Version 0.1.1, available from git (see Install). Tested against Pi 1.5.1; POSIX only (Linux and macOS). All six features below are implemented and covered by unit tests and live (gated) tests against a real Pi session. Open items are tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues).
+Version 0.2.0, available from npm and git (see Install). Tested against Pi 1.5.1; POSIX only (Linux and macOS). All six features below are implemented and covered by unit tests and live (gated) tests against a real Pi session. Open items are tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues).
 
 Requirements: Pi (`pi-coding-agent`) 1.5.1, the version it is tested against; Node.js 22.19 or newer; a POSIX system (Linux or macOS).
 
@@ -21,7 +21,19 @@ Requirements: Pi (`pi-coding-agent`) 1.5.1, the version it is tested against; No
 
 ## Install
 
-From git:
+From npm:
+
+```
+pi install npm:pi-bg
+```
+
+From git, pinned to a release tag:
+
+```
+pi install git:github.com/jszaday/pi-bg@v0.2.0
+```
+
+From git, latest `main`:
 
 ```
 pi install git:github.com/jszaday/pi-bg
@@ -33,9 +45,7 @@ From a local checkout:
 pi install /path/to/pi-bg
 ```
 
-An npm release is planned.
-
-Both the commands above write a package entry to `~/.pi/agent/settings.json`. Add `-l` to write it to `.pi/settings.json` instead; Pi reads project declarations only after the project is trusted. To try the extension for one run without installing it, pass `-e /path/to/pi-bg`. The package is loaded through the `pi.extensions` field of `package.json`, which points at `src/index.ts`. See Pi's package documentation for the other source forms.
+The install commands above write a package entry to `~/.pi/agent/settings.json`. Add `-l` to write it to `.pi/settings.json` instead; Pi reads project declarations only after the project is trusted. To try the extension for one run without installing it, pass `-e /path/to/pi-bg`. The package is loaded through the `pi.extensions` field of `package.json`, which points at `src/index.ts`. See Pi's package documentation for the other source forms.
 
 ## Example
 
