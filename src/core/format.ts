@@ -4,6 +4,7 @@
 
 import type {
   HandoffReason,
+  MonitorBatch,
   NotificationBatch,
   NotifyLevel,
   StreamName,
@@ -59,6 +60,7 @@ export type FailureCode =
   | "write_finished"
   | "write_too_large"
   | "write_failed"
+  | "monitor_ended"
   | "stream_unsupported"
   | "notify_failed"
   | "listener_failed"
@@ -293,6 +295,31 @@ export function writeText(r: { id: TaskId; bytes: number; eof: boolean }): strin
   return `Wrote ${r.bytes} bytes to the stdin of ${r.id}.${r.eof ? " Closed stdin (end of input)." : ""}`;
 }
 
+/** Result text of a bg_monitor call that starts (or replaces) a monitor. */
+export function monitorStartText(r: { id: TaskId; grep?: string; maxNotifications: number; replaced: boolean }): string {
+  const what = r.grep === undefined ? "every new output line" : `new output lines matching /${r.grep}/`;
+  const replaced = r.replaced ? ` It replaced the monitor already active on ${r.id}.` : "";
+  return `Monitoring ${r.id}: ${what} will arrive as notifications (batched per second, at most ${r.maxNotifications} notifications; lines already printed are not included).${replaced} Monitor messages do not end bg_wait and are not sent again if lost; bg_output has the full output.`;
+}
+
+/** Result text of a bg_monitor call with stop true. */
+export function monitorStopText(r: { id: TaskId; wasActive: boolean }): string {
+  return r.wasActive ? `Stopped the monitor on ${r.id}.` : `No monitor was active on ${r.id}, so nothing was stopped.`;
+}
+
+/** Message text of new monitored lines. */
+export function monitorText(b: MonitorBatch): string {
+  const lines = b.lines.map((l) => `    ${l}`).join("\n");
+  const parts = [`Monitor ${b.id}: ${b.lines.length} new line${b.lines.length === 1 ? "" : "s"}:`, lines];
+  if (b.omitted > 0) parts.push(`${b.omitted} more matching lines; read them with bg_output.`);
+  if (b.stopped === "max_notifications") {
+    parts.push(`The monitor stopped after ${b.maxNotifications} notifications. Action: call bg_monitor again with id ${b.id} to continue.`);
+  } else if (b.stopped === "task_ended") {
+    parts.push(`${b.id} has ended, so the monitor stopped.`);
+  }
+  return parts.join("\n");
+}
+
 export function killText(r: KillResult): string {
   const lines: string[] = [];
   if (r.killed.length > 0) lines.push(`Killed: ${r.killed.join(", ")}.`);
@@ -344,7 +371,7 @@ export function failure(code: FailureCode, ctx: Record<string, string | number>)
     case "log_degraded":
       return `Writing the log for ${v(ctx, "id")} failed: ${v(ctx, "error")}. Only the in-memory tail (last ${v(ctx, "kib")} KiB) is complete. Action: free disk space, or set output.logDir in pi-bg.json, then start the command again.`;
     case "bad_grep":
-      return `Invalid grep pattern ${v(ctx, "pattern")}: ${v(ctx, "error")}. Action: fix the regular expression (JavaScript syntax) and call bg_output again.`;
+      return `Invalid grep pattern ${v(ctx, "pattern")}: ${v(ctx, "error")}. Action: fix the regular expression (JavaScript syntax) and call ${ctx.tool === undefined ? "bg_output" : v(ctx, "tool")} again.`;
     case "bad_override": {
       const value = `'${v(ctx, "value")}'`;
       return v(ctx, "key") === "timeout"
@@ -375,6 +402,8 @@ export function failure(code: FailureCode, ctx: Record<string, string | number>)
       return `The write is ${v(ctx, "bytes")} bytes, over the ${v(ctx, "limit")}-byte limit for one bg_write call. Action: split the data into several bg_write calls.`;
     case "write_failed":
       return `Could not write to the stdin of ${v(ctx, "id")}: ${v(ctx, "error")}. Action: read the output with bg_output to see why, and start the command again with stdin true if it still needs input.`;
+    case "monitor_ended":
+      return `${v(ctx, "id")} has already ended (${v(ctx, "state")}); nothing to monitor. Action: read its output with bg_output.`;
     case "stream_unsupported":
       return `Stream ${v(ctx, "stream")} was requested, but this runner only provides combined output, so combined output is returned. Action: omit stream or use combined.`;
     case "notify_failed":

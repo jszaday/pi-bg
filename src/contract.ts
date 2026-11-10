@@ -136,3 +136,17 @@ export interface BgConfig {
   kill: { termGraceMs: number };
   lifecycle: { keepOnReload: boolean };
 }
+
+// ---- monitor (src/core/monitor-policy.ts) ----
+/** One monitor message: new output lines of a task. `stopped` names why the monitor ended with this message; absent while it keeps watching. */
+export interface MonitorBatch {
+  id: TaskId;
+  lines: string[];
+  /** Lines of this window that were not included (over the per-message line limit). */
+  omitted: number;
+  stopped?: "max_notifications" | "task_ended";
+  maxNotifications: number;
+}
+export interface MonitorSink {
+  send(batch: MonitorBatch, opts: { deliverAs: "steer" | "followUp" | "nextTurn"; triggerTurn: boolean }): void;
+}

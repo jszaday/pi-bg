@@ -7,6 +7,9 @@ import {
   formatRuntime,
   handoffText,
   killText,
+  monitorStartText,
+  monitorStopText,
+  monitorText,
   notificationText,
   outputText,
   summaryText,
@@ -275,6 +278,30 @@ describe("notificationText (golden)", () => {
   });
 });
 
+describe("monitor texts (golden)", () => {
+  it("lists new lines", () => {
+    expect(monitorText({ id: "bg3", lines: ["a", "b"], omitted: 0, maxNotifications: 10 })).toBe("Monitor bg3: 2 new lines:\n    a\n    b");
+    expect(monitorText({ id: "bg3", lines: ["a"], omitted: 0, maxNotifications: 10 })).toBe("Monitor bg3: 1 new line:\n    a");
+  });
+  it("counts omitted lines and points to bg_output", () => {
+    expect(monitorText({ id: "bg3", lines: ["a"], omitted: 7, maxNotifications: 10 })).toContain("7 more matching lines; read them with bg_output.");
+  });
+  it("says why the monitor stopped, with the action for the cap", () => {
+    const cap = monitorText({ id: "bg3", lines: ["a"], omitted: 0, stopped: "max_notifications", maxNotifications: 5 });
+    expect(cap).toContain("The monitor stopped after 5 notifications. Action: call bg_monitor again with id bg3 to continue.");
+    expect(monitorText({ id: "bg3", lines: ["a"], omitted: 0, stopped: "task_ended", maxNotifications: 5 })).toContain("bg3 has ended, so the monitor stopped.");
+  });
+  it("describes a start, a replacement and a stop", () => {
+    const start = monitorStartText({ id: "bg3", grep: "ERR", maxNotifications: 10, replaced: false });
+    expect(start).toContain("new output lines matching /ERR/");
+    expect(start).not.toContain("replaced");
+    expect(monitorStartText({ id: "bg3", maxNotifications: 10, replaced: true })).toContain("every new output line");
+    expect(monitorStartText({ id: "bg3", maxNotifications: 10, replaced: true })).toContain("It replaced the monitor already active on bg3.");
+    expect(monitorStopText({ id: "bg3", wasActive: true })).toBe("Stopped the monitor on bg3.");
+    expect(monitorStopText({ id: "bg3", wasActive: false })).toBe("No monitor was active on bg3, so nothing was stopped.");
+  });
+});
+
 describe("failure texts (golden, one per code)", () => {
   const cases: [FailureCode, Record<string, string | number>, string][] = [
     ["unknown_id", { id: "bg9", known: "bg1, bg2" }, "No task bg9 in this session. Known: bg1, bg2. Action: use bg_status with no id to list the tasks, then retry with a listed id."],
@@ -300,6 +327,8 @@ describe("failure texts (golden, one per code)", () => {
     ["write_no_stdin", { id: "bg4" }, "bg4 was not started with stdin, so it cannot take input. Action: start the command again with bash stdin true, then write with bg_write."],
     ["write_finished", { id: "bg4", state: "exited" }, "bg4 has already ended (exited), so it cannot take input. Action: use bg_output to read what it printed, or start the command again."],
     ["write_too_large", { bytes: 70000, limit: 65536 }, "The write is 70000 bytes, over the 65536-byte limit for one bg_write call. Action: split the data into several bg_write calls."],
+    ["monitor_ended", { id: "bg3", state: "exited" }, "bg3 has already ended (exited); nothing to monitor. Action: read its output with bg_output."],
+    ["bad_grep", { pattern: "(", error: "Unterminated group", tool: "bg_monitor" }, "Invalid grep pattern (: Unterminated group. Action: fix the regular expression (JavaScript syntax) and call bg_monitor again."],
     ["write_failed", { id: "bg4", error: "stdin was already closed" }, "Could not write to the stdin of bg4: stdin was already closed. Action: read the output with bg_output to see why, and start the command again with stdin true if it still needs input."],
     ["kill_signal_unsupported", { signal: "INT" }, "bg_kill cannot send SIGINT because the fallback runner (Pi's native operations) can only abort a task with SIGKILL. Action: call bg_kill with signal KILL or without signal, or restore the own-spawn runner (a startup warning says why it is not in use)."],
     ["kill_not_exited", { id: "bg4", seconds: 5, pid: 7, graceful: 1, signal: "SIGINT" }, "Could not stop bg4: the process group could not be signalled (still running 5s after SIGINT and the runner's SIGKILL escalation). Action: kill pid 7 manually, or check whether it is still running with bg_status."],
