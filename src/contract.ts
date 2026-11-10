@@ -117,7 +117,12 @@ export interface WaitResult { reason: WaitReason; waitedMs: number; tasks: Task[
 
 // ---- ui port ----
 export interface SessionOverrides { bgTimeoutSeconds?: number; notifyLevel?: NotifyLevel; }   // in memory, set by /bg timeout|notify
-export interface UiSink { refresh(): void; notify(msg: string, level: "info" | "warning" | "error"): void; }
+export interface UiSink {
+  refresh(): void;
+  notify(msg: string, level: "info" | "warning" | "error"): void;
+  /** Highlights (or not) the footer "N shells" item while the shells panel focus is on it. */
+  setFooterFocus(focused: boolean): void;
+}
 
 // ---- config ----
 export interface BgConfig {

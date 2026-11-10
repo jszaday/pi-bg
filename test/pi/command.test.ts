@@ -9,13 +9,13 @@ type Cmd = {
   handler(args: string, ctx: unknown): Promise<void>;
 };
 
-function setup(mode: "tui" | "print" = "tui") {
+function setup(mode: "tui" | "print" = "tui", openPanel?: (ctx: unknown) => void) {
   const s = w7Setup();
   const kill = vi.fn(async (): Promise<KillResult> => ({ killed: ["bg1"], alreadyFinished: [], failed: [] }));
   const move = vi.fn(() => ["bg1", "bg2"]);
   const setSession = vi.fn((k: string, v: string) => `set ${k}=${v}`);
   const tailOf = vi.fn(() => ["line a", "line b"]);
-  registerBgCommand(s.pi.asExtensionAPI(), { registry: s.registry, kill, move, setSession, tailOf });
+  registerBgCommand(s.pi.asExtensionAPI(), { registry: s.registry, kill, move, setSession, tailOf, openPanel });
   const cmd = s.pi.commands.get("bg") as Cmd;
   const ctx = w7Ctx(s.pi, mode);
   const run = async (args: string) => {
@@ -27,6 +27,31 @@ function setup(mode: "tui" | "print" = "tui") {
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("/bg panel (#15)", () => {
+  it("opens the panel for a bare /bg in the TUI and prints nothing", async () => {
+    const openPanel = vi.fn();
+    const t = setup("tui", openPanel);
+    expect(await t.run("")).toEqual([]);
+    expect(openPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the text list for /bg list, outside the TUI, without UI, and without a panel", async () => {
+    const openPanel = vi.fn();
+    const t = setup("tui", openPanel);
+    expect((await t.run("list"))[0].msg).toContain("No background tasks");
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const p = setup("print", openPanel);
+    await p.cmd.handler("", w7Ctx(p.pi, "print"));
+    expect(String(write.mock.calls[0]?.[0])).toContain("No background tasks");
+    const noUi = setup("tui", openPanel);
+    await noUi.cmd.handler("", w7Ctx(noUi.pi, "tui", false));
+    expect(noUi.pi.ui.notices[0].msg).toContain("No background tasks");
+    const none = setup("tui");
+    expect((await none.run(""))[0].msg).toContain("No background tasks");
+    expect(openPanel).not.toHaveBeenCalled();
+  });
+});
 
 describe("/bg", () => {
   it("lists tasks, and says so when there are none", async () => {

@@ -1,6 +1,6 @@
 // `/bg` command (DESIGN section 14). Output goes through ctx.ui.notify (stderr in print/json), not the session transcript,
 // so command replies never enter the model context or the saved session.
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { TaskId } from "../contract.js";
 import { bgCommandText, failure, killText, summaryText, type KillResult } from "../core/format.js";
 import type { TaskRegistry } from "../core/registry.js";
@@ -19,6 +19,8 @@ export function registerBgCommand(
     setSession: (k: "timeout" | "notify", v: string) => string;
     /** Last lines of a task's output (the runtime tail, owned by W6). */
     tailOf?: (id: TaskId) => string[] | Promise<string[]>;
+    /** Opens the shells panel (TUI only); `/bg` without arguments uses it when present. */
+    openPanel?: (ctx: ExtensionCommandContext) => void;
   },
 ): void {
   const { registry } = deps;
@@ -52,6 +54,8 @@ export function registerBgCommand(
       const [sub = "", arg = ""] = args.trim().split(/\s+/, 2);
       switch (sub) {
         case "":
+          if (deps.openPanel && ctx.mode === "tui" && ctx.hasUI) return deps.openPanel(ctx);
+        // falls through: no panel here, so the text list
         case "list": {
           const list = registry.list().map((t) => registry.summarize(t));
           say(list.length === 0 ? summaryText(list) : `${bgCommandText("list", { count: list.length })}\n${summaryText(list)}`);

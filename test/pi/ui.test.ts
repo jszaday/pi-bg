@@ -20,6 +20,28 @@ function setup(mode: "tui" | "rpc" | "json" | "print" = "tui") {
 afterEach(() => vi.restoreAllMocks());
 
 describe("createUi", () => {
+  it("setFooterFocus inverts the status text and refreshes on change only (#15)", () => {
+    const t = setup();
+    t.create({ startInBackground: true });
+    t.ui.setFooterFocus(true);
+    expect(t.lastStatus()).toBe("\x1b[7m1 shell\x1b[27m");
+    const n = t.pi.ui.statuses.length;
+    t.ui.setFooterFocus(true);
+    expect(t.pi.ui.statuses).toHaveLength(n);
+    t.ui.setFooterFocus(false);
+    expect(t.lastStatus()).toBe("1 shell");
+  });
+
+  it("setFooterFocus with no shells shows no status, and a session restart drops the focus", () => {
+    const t = setup();
+    t.ui.setFooterFocus(true);
+    expect(t.pi.ui.statuses).toEqual([]);
+    t.create({ startInBackground: true });
+    expect(t.lastStatus()).toBe("\x1b[7m1 shell\x1b[27m");
+    t.ui.onSessionStart(t.ctx);
+    expect(t.lastStatus()).toBe("1 shell");
+  });
+
   it("shows nothing with no tasks", () => {
     const t = setup();
     expect(t.pi.ui.widgets).toEqual([]);
