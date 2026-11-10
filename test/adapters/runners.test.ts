@@ -125,10 +125,11 @@ describe("own-spawn specifics", () => {
   });
   it("escalation also kills a grandchild that ignored SIGTERM after the leader died", async () => {
     const d = tmp();
-    const r = await run(own(300), { command: `(trap '' TERM; echo $BASHPID > ${d}/gc; exec sleep 60) & wait`, cwd: d, env: env() }, (h) => {
+    const r = await run(own(300), { command: `(trap '' TERM; exec sleep 60) & echo $! > ${d}/gc; wait`, cwd: d, env: env() }, (h) => {
       void waitFor(() => fs.existsSync(`${d}/gc`)).then(() => setTimeout(() => h.kill("term"), 100));
     });
     const gc = await readPid(`${d}/gc`);
+    expect(gc).toBeGreaterThan(0); // alive(0) signals our own group and is always true
     expect(r.exit.signal).toBe("SIGTERM");
     expect(await waitFor(() => !alive(gc), 2000)).toBe(true);
   });
