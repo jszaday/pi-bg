@@ -62,8 +62,22 @@ describe("killTasks", () => {
     expect(r.killed).toEqual([]);
     expect(r.failed).toHaveLength(1);
     expect(r.failed[0].error).toContain("4242");
+    expect(r.failed[0].error).toContain("SIGTERM and the runner's SIGKILL escalation");
     expect(r.failed[0].error).toContain("Action");
     expect(h.clock.pending()).toBe(0);
+  });
+  it("names SIGKILL only, not SIGTERM, when the runner has no graceful term", async () => {
+    const h = makeHarness({ caps: { gracefulTerm: false } });
+    const t = h.s.registry.create({ command: "x", cwd: "/", hardTimeoutMs: null, bgTimeoutMs: null, notify: "done", startInBackground: true });
+    const handle: ProcessHandle = { pid: 4242, exited: new Promise(() => {}), kill: vi.fn() };
+    h.s.runtime.set(t.id, { handle, tail: { push() {}, lines: () => [], partial: () => "", lastLine: () => undefined, totalBytes: () => 0 }, timers: [] });
+    const p = killTasks(h.s, [t.id], "bg_kill");
+    await h.flush();
+    h.clock.advance(h.config.kill.termGraceMs + 2000);
+    const r = await p;
+    expect(r.failed[0].error).toContain("after SIGKILL");
+    expect(r.failed[0].error).not.toContain("SIGTERM");
+    expect(r.failed[0].error).toContain("Action");
   });
   it("fails a running task that has no process handle", async () => {
     const h = makeHarness();

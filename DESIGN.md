@@ -315,6 +315,8 @@ Every failure message names the cause and the action, reaches the model (tool er
 | Log write failure | Result flagged `log_degraded`; text says output is available only from the in-memory tail (last N KiB); action: free disk space or set `output.logDir`. |
 | Invalid grep | Error with the regex parse error; action: fix the pattern. |
 | Invalid config | Warning once per key with the file and key; defaults used. |
+| Unreadable config file or invalid JSON | Warning naming the file and the read or parse error; the whole file is ignored and the defaults are used; action: fix the file and reload. |
+| Log cleanup failure | Warning naming the log directory and the operation; no logs are deleted this session; retried at the next session start. |
 | Bash owned by another extension | Startup warning naming the owner: `bash is registered by <ext>, which took precedence; pi-bg cannot add run_in_background or ctrl+b. Remove the other bash override to use pi-bg.` Because the first registration wins silently, pi-bg's `bash` is then never called; the four `bg_*` tools stay registered and answer `pi-bg is inactive: bash is owned by <ext>; there are no background tasks.` |
 | Unsupported platform | `pi-bg is inactive on Windows in v1; the built-in bash is unchanged.` |
 

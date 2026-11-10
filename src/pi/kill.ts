@@ -71,6 +71,7 @@ async function waitForExit(
     error: failure("kill_not_exited", {
       id,
       seconds: Math.round(boundMs / 1000),
+      graceful: s.runner().capabilities.gracefulTerm ? 1 : 0,
       ...(pid !== undefined && { pid }),
     }),
   });

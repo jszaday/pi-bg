@@ -47,7 +47,6 @@ export type FailureCode =
   | "kill_failed"
   | "log_degraded"
   | "bad_grep"
-  | "bad_config"
   | "bad_override"
   | "bash_owned"
   | "inactive"
@@ -337,8 +336,6 @@ export function failure(code: FailureCode, ctx: Record<string, string | number>)
       return `Writing the log for ${v(ctx, "id")} failed: ${v(ctx, "error")}. Only the in-memory tail (last ${v(ctx, "kib")} KiB) is complete. Action: free disk space, or set output.logDir in pi-bg.json, then start the command again.`;
     case "bad_grep":
       return `Invalid grep pattern ${v(ctx, "pattern")}: ${v(ctx, "error")}. Action: fix the regular expression (JavaScript syntax) and call bg_output again.`;
-    case "bad_config":
-      return `Invalid value for ${v(ctx, "key")} in ${v(ctx, "file")}: ${v(ctx, "reason")}. The default ${v(ctx, "fallback")} is used. Action: fix the value in ${v(ctx, "file")}.`;
     case "bad_override": {
       const value = `'${v(ctx, "value")}'`;
       return v(ctx, "key") === "timeout"
@@ -382,12 +379,13 @@ export function failure(code: FailureCode, ctx: Record<string, string | number>)
     case "kill_no_handle":
       return failure("kill_failed", { ...ctx, error: "the task has no live process handle yet" });
     case "kill_not_exited":
-      return failure("kill_failed", { ...ctx, error: `still running ${v(ctx, "seconds")}s after SIGTERM and the runner's SIGKILL escalation` });
+      // graceful = 0: the runner sent SIGKILL at once (no SIGTERM stage), so naming SIGTERM would be wrong
+      return failure("kill_failed", { ...ctx, error: `still running ${v(ctx, "seconds")}s after ${Number(ctx.graceful) === 0 ? "SIGKILL" : "SIGTERM and the runner's SIGKILL escalation"}` });
     case "config_unreadable":
-      return failure("bad_config", { key: "(whole file)", file: v(ctx, "file"), reason: `cannot read the ${v(ctx, "label")} file: ${v(ctx, "error")}`, fallback: "settings (this file ignored)" });
+      return `Cannot read the ${v(ctx, "label")} config ${v(ctx, "file")}: ${v(ctx, "error")}. pi-bg ignores this file and uses the default settings. Action: fix the file's permissions or path, then reload Pi.`;
     case "config_bad_json":
-      return failure("bad_config", { key: "(whole file)", file: v(ctx, "file"), reason: `invalid JSON: ${v(ctx, "error")}`, fallback: "settings (this file ignored)" });
+      return `${v(ctx, "file")} is not valid JSON: ${v(ctx, "error")}. pi-bg ignores this file and uses the default settings. Action: fix the syntax error in ${v(ctx, "file")} (a JSON validator shows where), then reload Pi.`;
     case "log_cleanup_failed":
-      return failure("bad_config", { key: "output.logRetentionDays", file: "log directory", reason: `log cleanup failed: ${v(ctx, "error")}`, fallback: "no cleanup this session" });
+      return `Log cleanup failed: ${v(ctx, "error")}. Old logs are not deleted this session. Action: make the log directory readable and writable (output.logDir, or pi-bg-<uid> under the system temp directory); cleanup runs again at the next session start.`;
   }
 }

@@ -138,7 +138,12 @@ export function createFsLogStore(opts: { baseDir: string; sessionId: string; max
     async gc(olderThanMs) {
       const removed: string[] = [];
       let entries: string[];
-      try { entries = nodeFs.readdirSync(opts.baseDir); } catch { return { removed }; }
+      try {
+        entries = nodeFs.readdirSync(opts.baseDir);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") return { removed };
+        throw new Error(`Cannot list log directory ${opts.baseDir}: ${(e as Error).message}`);
+      }
       const cutoff = Date.now() - olderThanMs;
       for (const name of entries) {
         const dir = join(opts.baseDir, name);

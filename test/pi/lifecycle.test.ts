@@ -73,7 +73,7 @@ describe("session_start", () => {
     const x = setup();
     vi.spyOn(x.h.logs, "gc").mockRejectedValue(new Error("disk"));
     await start(x);
-    expect(x.h.uiCalls.some((c) => c.msg.includes("log cleanup failed") && c.level === "warning")).toBe(true);
+    expect(x.h.uiCalls.some((c) => c.msg.includes("Log cleanup failed") && c.level === "warning")).toBe(true);
     expect(x.calls.keyInstalls).toBe(1);
   });
 

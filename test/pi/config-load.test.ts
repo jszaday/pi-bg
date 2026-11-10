@@ -91,7 +91,7 @@ describe("loadConfig", () => {
     expect(config).toEqual(DEFAULT_CONFIG);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("pi-bg.json");
-    expect(warnings[0]).toContain("invalid JSON");
+    expect(warnings[0]).toContain("not valid JSON");
     expect(warnings[0]).toContain("Action:");
   });
 

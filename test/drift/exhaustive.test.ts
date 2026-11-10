@@ -22,7 +22,6 @@ const FAILURE_CTX = {
   kill_failed: { id: "bg1", error: "EPERM", pid: 42 },
   log_degraded: { id: "bg1", error: "ENOSPC", kib: 64 },
   bad_grep: { pattern: "(", error: "Unterminated group" },
-  bad_config: { key: "bgTimeoutSeconds", file: "pi-bg.json", reason: "not a number", fallback: "30" },
   bad_override: { key: "timeout", value: "abc" },
   bash_owned: { owner: "other-ext" },
   inactive: { reason: "disabled", action: "remove --no-bg" },

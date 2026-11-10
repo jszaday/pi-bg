@@ -170,6 +170,12 @@ describe("fs log store", () => {
       expect((await s.gc(7 * 864e5)).removed).toEqual([ours]);
       for (const keep of [unrelated, emptyDir, junk]) expect(fs.existsSync(keep)).toBe(true);
     });
+    it("a base directory that cannot be listed throws a message naming the directory and the operation", async () => {
+      const base = join(tmp(), "afile");
+      fs.writeFileSync(base, "x");
+      const s = createFsLogStore({ baseDir: base, sessionId: "s", maxLogBytes: 1 });
+      await expect(s.gc(0)).rejects.toThrow(`Cannot list log directory ${base}`);
+    });
     it("a missing base directory is not an error", async () => {
       const s = createFsLogStore({ baseDir: join(tmp(), "nope"), sessionId: "s", maxLogBytes: 1 });
       expect(await s.gc(0)).toEqual({ removed: [] });
