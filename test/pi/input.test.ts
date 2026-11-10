@@ -173,6 +173,19 @@ describe("installMoveKey shells focus (#15)", () => {
     expect(t.shells.setFooterFocus).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["the method was renamed", { isAutocompleteShowing: () => false }],
+    ["the member is not a function", { isShowingAutocomplete: false }],
+  ])("fails closed when the Pi internal changed: %s", (_name, focused) => {
+    const t = focusSetup();
+    t.bg();
+    t.pi.ui.focused = focused as never;
+    expect(t.pi.ui.typeKey(DOWN)).toBe(false);
+    expect(t.shells.setFooterFocus).not.toHaveBeenCalled();
+    t.pi.ui.focused = t.pi.ui.editor; // negative control: the intact editor is accepted
+    expect(t.pi.ui.typeKey(DOWN)).toBe(true);
+  });
+
   it("never consumes without a TUI handle (negative control: the widget factory was never run)", () => {
     const { registry, pi } = w7Setup();
     pi.ui.setWidget = () => {};
