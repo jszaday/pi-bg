@@ -55,6 +55,8 @@ Ask the agent: "Start the dev server in the background, then check that it came 
 
 `bg_write` writes text to the stdin of a running task that was started with `stdin` true, and with `eof` closes stdin so the program sees end of input. One call carries at most 64 KiB. A task started without stdin, or one that has ended, is rejected with an explanation. The fallback runner does not support `stdin`.
 
+`bg_monitor` turns new output lines of a running task into notifications, so the agent is woken by specific output (a "ready" line, an error) instead of polling `bg_output`. An optional `grep` (JavaScript regex) keeps only matching lines. Lines are batched per second (at most 20 per message), and the monitor stops after `max_notifications` messages (default 10, maximum 100) or when the task ends; `stop` ends it earlier, and a new call replaces it. Lines printed before the call are not included, monitor messages are not sent again if lost (the log keeps everything), a monitor does not survive a reload, and a message does not end a running `bg_wait`.
+
 ## Commands
 
 `/bg` with no argument opens the shells panel in the terminal UI (see Shells panel below); `/bg list` prints the tasks as text, which is also what `/bg` does in RPC, print and json modes. `/bg tail <id>` shows the tail of one task. It also stops tasks (`/bg kill <id>` or `/bg kill all`), sets the session timeout and notification level (`/bg timeout <s>`, `/bg notify <level>`) for the current session only, and moves the running command to the background (`/bg move`). `/bg help` lists the subcommands.

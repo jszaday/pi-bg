@@ -1,19 +1,20 @@
 
 import { DEFAULT_CONFIG } from "../../src/core/config.js";
 import { createIdAllocator } from "../../src/core/ids.js";
+import { MonitorPolicy } from "../../src/core/monitor-policy.js";
 import { NotificationPolicy } from "../../src/core/notify-policy.js";
 import { TaskRegistry } from "../../src/core/registry.js";
 import { createTailBuffer } from "../../src/core/tail.js";
 import { WaitCoordinator } from "../../src/core/wait.js";
-import type { BgConfig, NotificationSink, TaskSpec } from "../../src/contract.js";
+import type { BgConfig, MonitorSink, NotificationSink, TaskSpec } from "../../src/contract.js";
 import type { Services } from "../../src/pi/runtime.js";
-import { FakeClock, FakeNotificationSink, FakeRunner, MemLogStore, type FakeCtx, type FakePi } from "../fakes/index.js";
+import { FakeClock, FakeMonitorSink, FakeNotificationSink, FakeRunner, MemLogStore, type FakeCtx, type FakePi } from "../fakes/index.js";
 
 export function w8Spec(over: Partial<TaskSpec> = {}): TaskSpec {
   return { command: "sleep 1", cwd: "/tmp", hardTimeoutMs: null, bgTimeoutMs: null, notify: "done", startInBackground: true, ...over };
 }
 
-export function w8Services(over: { config?: Partial<BgConfig>; sink?: NotificationSink } = {}) {
+export function w8Services(over: { config?: Partial<BgConfig>; sink?: NotificationSink; monitorSink?: MonitorSink } = {}) {
   const clock = new FakeClock();
   const config: BgConfig = { ...structuredClone(DEFAULT_CONFIG), ...over.config };
   const ids = createIdAllocator(0);
@@ -27,8 +28,11 @@ export function w8Services(over: { config?: Partial<BgConfig>; sink?: Notificati
     sink,
     summarize: (t) => ({ task: registry.summarize(t), tail: [] }),
   });
+  const fakeMonitorSink = new FakeMonitorSink();
+  const monitors = new MonitorPolicy({ clock, config: config.notify, sink: over.monitorSink ?? fakeMonitorSink });
   const waits = new WaitCoordinator({ clock, registry, maxWaitMs: 1000, confirmQueued: () => true });
   registry.subscribe((t, ev, applied) => {
+    monitors.onTaskEvent(t, ev, applied);
     notify.onTaskEvent(t, ev, applied);
     waits.onTaskEvent(t, ev, applied);
   });
@@ -45,10 +49,11 @@ export function w8Services(over: { config?: Partial<BgConfig>; sink?: Notificati
     ctx: {},
     waits,
     notify,
+    monitors,
     ui: { refresh() {}, setFooterFocus() {}, notify: (msg, level) => void uiCalls.push({ msg, level }) },
     sessionId: () => "sess",
   };
-  return { s, clock, registry, sink: fakeSink, notify, waits, uiCalls, logs, config };
+  return { s, clock, registry, sink: fakeSink, monitorSink: fakeMonitorSink, notify, monitors, waits, uiCalls, logs, config };
 }
 
 /** Adds the ctx members the glue reads beyond FakeCtx. */

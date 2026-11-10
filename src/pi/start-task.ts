@@ -67,6 +67,7 @@ export function startTask(s: Services, spec: TaskSpec, opts: StartOptions = {}):
 
   const sink = (chunk: Uint8Array, stream: "stdout" | "stderr" | "combined"): void => {
     rt.tail.push(chunk);
+    s.monitors.onOutput(id, chunk);
     if (rt.log) {
       rt.log.write(chunk, stream);
       if (rt.log.degraded !== null) degrade(rt.log.degraded);

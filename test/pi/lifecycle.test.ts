@@ -162,6 +162,20 @@ describe("session_shutdown", () => {
     expect(x.h.registry.get(t.id)!.notifyStatus).toBe("suppressed");
   });
 
+  it("drops monitors without sending, and the kills that follow send no monitor message", async () => {
+    const x = setup();
+    await start(x);
+    const t = w8Task(x.h);
+    x.h.monitors.start(t.id, { maxNotifications: 10 });
+    x.h.monitors.onOutput(t.id, new TextEncoder().encode("pending line\n"));
+    expect(x.h.clock.pending()).toBeGreaterThan(0);
+    await x.pi.emit("session_shutdown", { type: "session_shutdown", reason: "quit" });
+    expect(x.h.monitors.active(t.id)).toBe(false);
+    x.h.registry.dispatch(t.id, { type: "exit", code: null, signal: "SIGTERM", at: 0 });
+    x.h.clock.advance(10_000);
+    expect(x.h.monitorSink.sent).toHaveLength(0);
+  });
+
   it("is idempotent: a second shutdown does not kill again", async () => {
     const x = setup();
     await start(x);

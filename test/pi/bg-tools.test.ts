@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_WRITE_BYTES, commandTail, registerBgTools } from "../../src/pi/bg-tools.js";
+import { MONITOR_BATCH_MS } from "../../src/core/monitor-policy.js";
 import { evictFinished } from "../../src/pi/runtime.js";
 import { makeHarness, type Harness } from "./w6a-services.js";
 
@@ -16,9 +17,9 @@ const call = (h: Harness, name: string, params: unknown, opts: Parameters<Harnes
   h.pi.callTool(name, params, opts);
 
 describe("registration and validation", () => {
-  it("registers the five tools with snake_case schemas", async () => {
+  it("registers the six tools with snake_case schemas", async () => {
     const h = setup();
-    expect([...h.pi.tools.keys()].sort()).toEqual(["bg_kill", "bg_output", "bg_status", "bg_wait", "bg_write"]);
+    expect([...h.pi.tools.keys()].sort()).toEqual(["bg_kill", "bg_monitor", "bg_output", "bg_status", "bg_wait", "bg_write"]);
     await expect(call(h, "bg_output", {})).rejects.toThrow(/schema/); // id required
     await expect(call(h, "bg_status", { tailLines: 3, tail_lines: "x" })).rejects.toThrow(/schema/);
     await expect(call(h, "bg_wait", { timeout_s: 5000 })).rejects.toThrow(/schema/);
@@ -35,13 +36,13 @@ describe("inactive", () => {
   it("answers inactive when inactiveReason is set or config disabled, for every tool", async () => {
     const h = setup();
     h.s.inactiveReason = () => "pi-bg is inactive: bash is owned by other-ext; there are no background tasks.";
-    for (const [n, p] of [["bg_status", {}], ["bg_output", { id: "bg1" }], ["bg_wait", {}], ["bg_kill", { all: true }], ["bg_write", { id: "bg1", data: "x" }]] as const) {
+    for (const [n, p] of [["bg_status", {}], ["bg_output", { id: "bg1" }], ["bg_wait", {}], ["bg_kill", { all: true }], ["bg_write", { id: "bg1", data: "x" }], ["bg_monitor", { id: "bg1" }]] as const) {
       await expect(call(h, n, p)).rejects.toThrow(/owned by other-ext/);
     }
     h.s.inactiveReason = undefined;
     h.config.enabled = false;
     await expect(call(h, "bg_status", {})).rejects.toThrow(/inactive.*Action/s);
-    expect(h.ui.msgs.length).toBe(6);
+    expect(h.ui.msgs.length).toBe(7);
   });
 });
 
@@ -482,5 +483,105 @@ describe("evicted runtime entries (#12)", () => {
     expect(out[0]).toMatch(/log file is missing or unreadable\. Action:/);
     // negative control: bg2 still holds its ring, so no note
     expect(await commandTail(h.s, h.s.registry.get("bg2")!, 2)).toEqual(["later"]);
+  });
+});
+
+describe("bg_monitor", () => {
+  const monitored = (h: Harness) => h.monitorSink.sent.map((m) => m.batch.lines);
+  it("starts a monitor, reports it in snake_case, and delivers new lines after the batching window", async () => {
+    const h = setup();
+    h.start("srv", [{ at: 0, chunk: "old line\n" }, { at: 100, chunk: "ready\nnoise\n" }]);
+    await h.flush();
+    const r = await call(h, "bg_monitor", { id: "bg1", grep: "ready" });
+    expect(sc(r)).toEqual({ id: "bg1", monitoring: true, grep: "ready", max_notifications: 10 });
+    expect(text(r)).toContain("Monitoring bg1: new output lines matching /ready/");
+    h.clock.advance(100);
+    h.clock.advance(MONITOR_BATCH_MS);
+    expect(monitored(h)).toEqual([["ready"]]); // "old line" came before the call
+  });
+  it("without grep every new line is reported", async () => {
+    const h = setup();
+    h.start("srv", [{ at: 100, chunk: "a\nb\n" }]);
+    const r = await call(h, "bg_monitor", { id: "bg1" });
+    expect(sc(r)).toEqual({ id: "bg1", monitoring: true, max_notifications: 10 });
+    h.clock.advance(100 + MONITOR_BATCH_MS);
+    expect(monitored(h)).toEqual([["a", "b"]]);
+  });
+  it("skips the rest of a line the task had begun before the call", async () => {
+    const h = setup();
+    h.start("srv", [{ at: 0, chunk: "half a li" }, { at: 100, chunk: "ne\nnext\n" }]);
+    await h.flush();
+    await call(h, "bg_monitor", { id: "bg1" });
+    h.clock.advance(100 + MONITOR_BATCH_MS);
+    expect(monitored(h)).toEqual([["next"]]);
+  });
+  it("honours max_notifications: the last message stops the monitor", async () => {
+    const h = setup();
+    h.start("srv", [{ at: 100, chunk: "a\n" }, { at: 2000, chunk: "b\n" }]);
+    await call(h, "bg_monitor", { id: "bg1", max_notifications: 1 });
+    h.clock.advance(2000 + MONITOR_BATCH_MS);
+    expect(monitored(h)).toEqual([["a"]]);
+    expect(h.monitorSink.sent[0].batch.stopped).toBe("max_notifications");
+  });
+  it("a second call replaces the monitor and says so", async () => {
+    const h = setup();
+    h.start("srv", [{ at: 100, chunk: "a1\nb1\n" }]);
+    expect(sc(await call(h, "bg_monitor", { id: "bg1", grep: "a" })).replaced).toBeUndefined();
+    const r = await call(h, "bg_monitor", { id: "bg1", grep: "b" });
+    expect(sc(r)).toMatchObject({ monitoring: true, replaced: true });
+    expect(text(r)).toContain("replaced the monitor already active on bg1");
+    h.clock.advance(100 + MONITOR_BATCH_MS);
+    expect(monitored(h)).toEqual([["b1"]]);
+  });
+  it("stop ends the monitor; stop without a monitor is a non-error result", async () => {
+    const h = setup();
+    h.start("srv", [{ at: 100, chunk: "a\n" }]);
+    expect(sc(await call(h, "bg_monitor", { id: "bg1", stop: true }))).toEqual({ id: "bg1", monitoring: false });
+    expect(text(await call(h, "bg_monitor", { id: "bg1", stop: true }))).toBe("No monitor was active on bg1, so nothing was stopped.");
+    await call(h, "bg_monitor", { id: "bg1" });
+    const r = await call(h, "bg_monitor", { id: "bg1", stop: true });
+    expect(text(r)).toBe("Stopped the monitor on bg1.");
+    h.clock.advance(100 + MONITOR_BATCH_MS);
+    expect(monitored(h)).toEqual([]);
+    expect(h.ui.msgs).toEqual([]);
+  });
+  it("stop on an ended task is allowed", async () => {
+    const h = setup();
+    h.start("job", [{ at: 0, exit: exit0 }]);
+    await h.flush();
+    expect(sc(await call(h, "bg_monitor", { id: "bg1", stop: true })).monitoring).toBe(false);
+  });
+  it("fails for an ended task, naming cause and action, and starts nothing", async () => {
+    const h = setup();
+    h.start("job", [{ at: 0, exit: exit0 }]);
+    await h.flush();
+    await expect(call(h, "bg_monitor", { id: "bg1" })).rejects.toThrow(/bg1 has already ended \(exited\); nothing to monitor\. Action: read its output with bg_output\./);
+    expect(h.s.monitors.active("bg1")).toBe(false);
+    expect(h.ui.msgs.some((m) => m.includes("nothing to monitor"))).toBe(true);
+  });
+  it("fails for an invalid grep, naming bg_monitor as the tool to call again", async () => {
+    const h = setup();
+    h.start("srv");
+    await expect(call(h, "bg_monitor", { id: "bg1", grep: "(" })).rejects.toThrow(/Invalid grep pattern \(.*Action: fix the regular expression.*call bg_monitor again/s);
+    expect(h.s.monitors.active("bg1")).toBe(false);
+  });
+  it("keeps the previous monitor when a replacing call has an invalid grep", async () => {
+    const h = setup();
+    h.start("srv");
+    await call(h, "bg_monitor", { id: "bg1" });
+    await expect(call(h, "bg_monitor", { id: "bg1", grep: "(" })).rejects.toThrow(/Invalid grep/);
+    expect(h.s.monitors.active("bg1")).toBe(true);
+  });
+  it("fails for unknown and stale ids", async () => {
+    const h = setup({ seed: 1 });
+    h.start("srv");
+    await expect(call(h, "bg_monitor", { id: "bg9" })).rejects.toThrow(/No task bg9.*Action/s);
+    await expect(call(h, "bg_monitor", { id: "bg1" })).rejects.toThrow(/started before/);
+  });
+  it("rejects max_notifications outside 1..100 and a missing id before execute", async () => {
+    const h = setup();
+    await expect(call(h, "bg_monitor", { id: "bg1", max_notifications: 0 })).rejects.toThrow(/schema/);
+    await expect(call(h, "bg_monitor", { id: "bg1", max_notifications: 101 })).rejects.toThrow(/schema/);
+    await expect(call(h, "bg_monitor", {})).rejects.toThrow(/schema/);
   });
 });

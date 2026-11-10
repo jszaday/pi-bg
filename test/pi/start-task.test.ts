@@ -32,6 +32,21 @@ describe("startTask", () => {
     expect(e.reaper.watched).toEqual([[10_000, 10_000]]);
   });
 
+  it("feeds output chunks to the monitors, and a monitor ends with the task", async () => {
+    const e = w6bEnv();
+    e.runner.script([{ at: 10, chunk: "before\n" }, { at: 20, chunk: "ready\npart" }, { at: 30, exit: { code: 0, signal: null } }]);
+    const r = startTask(e.s, spec({ startInBackground: true }));
+    expect(r.ok).toBe(true);
+    e.s.monitors.start("bg1", { maxNotifications: 10 });
+    e.s.registry.subscribe((t, ev, applied) => e.s.monitors.onTaskEvent(t, ev, applied));
+    e.clock.advance(10);
+    e.clock.advance(10);
+    await w6bFlush();
+    e.clock.advance(10);
+    await w6bFlush();
+    expect(e.monitorSink.sent.map((m) => [m.batch.lines, m.batch.stopped])).toEqual([[["before", "ready", "part"], "task_ended"]]);
+  });
+
   it("on exit dispatches exit, clears timers, keeps the reaper watching (#18) and calls onExit", async () => {
     const e = w6bEnv();
     e.runner.script([{ at: 10, exit: { code: 3, signal: null } }]);

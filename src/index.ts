@@ -9,6 +9,7 @@ import type { BgConfig, LogStore, ProcessRunner, TaskId } from "./contract.js";
 import { DEFAULT_CONFIG } from "./core/config.js";
 import { failure } from "./core/format.js";
 import { createIdAllocator } from "./core/ids.js";
+import { MonitorPolicy } from "./core/monitor-policy.js";
 import { NotificationPolicy } from "./core/notify-policy.js";
 import { TaskRegistry } from "./core/registry.js";
 import { WaitCoordinator } from "./core/wait.js";
@@ -21,9 +22,9 @@ import { installMoveKey } from "./pi/input.js";
 import { createShellsPanel } from "./pi/shells-panel.js";
 import { killTasks } from "./pi/kill.js";
 import { installLifecycle } from "./pi/lifecycle.js";
-import { createNotificationSink, installNotifyHandlers } from "./pi/notify.js";
+import { createMonitorSink, createNotificationSink, installNotifyHandlers } from "./pi/notify.js";
 import { keepForReload, takeKept } from "./pi/reload-slot.js";
-import { registerNotificationRenderer } from "./pi/renderer.js";
+import { registerMonitorRenderer, registerNotificationRenderer } from "./pi/renderer.js";
 import type { Services, TaskRuntime } from "./pi/runtime.js";
 import { createUi } from "./pi/ui.js";
 
@@ -104,6 +105,11 @@ export default function piBg(pi: ExtensionAPI): void {
       return { task: registry.summarize(t, tail), tail };
     },
   });
+  const monitors = new MonitorPolicy({
+    clock,
+    config: notifyConfig,
+    sink: createMonitorSink(pi, (e) => s.ui.notify(failure("notify_failed", { error: (e as Error).message }), "warning")),
+  });
   const waits = new WaitCoordinator({
     clock,
     registry,
@@ -111,6 +117,7 @@ export default function piBg(pi: ExtensionAPI): void {
     confirmQueued: () => ctxRef.current?.hasPendingMessages?.(),
   });
   const unsubscribeRegistry = registry.subscribe((t, ev, applied) => {
+    monitors.onTaskEvent(t, ev, applied); // before notify: the last monitor lines precede the task-end notification
     notify.onTaskEvent(t, ev, applied);
     waits.onTaskEvent(t, ev, applied);
   });
@@ -141,6 +148,7 @@ export default function piBg(pi: ExtensionAPI): void {
     ctx: ctxRef,
     waits,
     notify,
+    monitors,
     ui,
     sessionId,
     reaper: createReaper(),
@@ -158,6 +166,7 @@ export default function piBg(pi: ExtensionAPI): void {
     openPanel: (ctx) => shells.open(ctx),
   });
   registerNotificationRenderer(pi);
+  registerMonitorRenderer(pi);
   installInputHandler(pi, s);
   installNotifyHandlers(pi, notify);
   const lifecycle = installLifecycle(pi, s, {

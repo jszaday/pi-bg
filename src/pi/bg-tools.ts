@@ -4,9 +4,9 @@ import type { KillSignal, StreamName, Task, TaskId, TaskSummary } from "../contr
 import { failure } from "../core/format.js";
 import { grepLines, normalizeForDisplay } from "../core/tail.js";
 import { isTerminal } from "../core/task.js";
-import { SCHEMAS, type BgKillArgs, type BgOutputArgs, type BgStatusArgs, type BgWaitArgs, type BgWriteArgs } from "../tools/schemas.js";
+import { SCHEMAS, type BgKillArgs, type BgMonitorArgs, type BgOutputArgs, type BgStatusArgs, type BgWaitArgs, type BgWriteArgs } from "../tools/schemas.js";
 import { killTasks } from "./kill.js";
-import { toKillResult, toOutputResult, toStatusResult, toWaitResult, toWriteResult } from "./results.js";
+import { toKillResult, toMonitorResult, toOutputResult, toStatusResult, toWaitResult, toWriteResult } from "./results.js";
 import type { Services, TaskRuntime } from "./runtime.js";
 
 const DEFAULT_STATUS_TAIL = 10;
@@ -16,6 +16,7 @@ const WAIT_TAIL = 10;
 const GREP_WINDOW_BYTES = 8 * 1024 * 1024;
 const MIN_TAIL_WINDOW_BYTES = 64 * 1024;
 const NL = 0x0a;
+const DEFAULT_MAX_NOTIFICATIONS = 10;
 /** Most bytes one bg_write call may send; keeps a single call from flooding a pipe the program may not be reading. Mirrored in the data description in tools/schemas.ts. */
 export const MAX_WRITE_BYTES = 64 * 1024;
 
@@ -271,6 +272,26 @@ async function write(s: Services, p: BgWriteArgs, ctx: ExtensionContext): Promis
   return toWriteResult({ id: t.id, bytes: bytes.byteLength, eof });
 }
 
+async function monitor(s: Services, p: BgMonitorArgs, ctx: ExtensionContext): Promise<Result> {
+  guard(s, ctx);
+  const t = lookup(s, p.id);
+  if (p.stop === true) return toMonitorResult({ id: t.id, monitoring: false, wasActive: s.monitors.stop(t.id) });
+  if (isTerminal(t)) fail(s, failure("monitor_ended", { id: t.id, state: t.state }));
+  let grep: RegExp | undefined;
+  if (p.grep !== undefined) {
+    try {
+      grep = new RegExp(p.grep);
+    } catch (e) {
+      fail(s, failure("bad_grep", { pattern: p.grep, error: (e as Error).message, tool: "bg_monitor" }));
+    }
+  }
+  const maxNotifications = p.max_notifications ?? DEFAULT_MAX_NOTIFICATIONS;
+  // A line the task had begun before this call is not "new": the policy skips the rest of it.
+  const midLine = (liveRuntime(s, t.id)?.tail.partial() ?? "") !== "";
+  const { replaced } = s.monitors.start(t.id, { grep, maxNotifications, midLine });
+  return toMonitorResult({ id: t.id, monitoring: true, ...(p.grep !== undefined ? { grep: p.grep } : {}), maxNotifications, replaced });
+}
+
 export function registerBgTools(pi: ExtensionAPI, s: Services): void {
   pi.registerTool({
     name: "bg_status",
@@ -313,5 +334,13 @@ export function registerBgTools(pi: ExtensionAPI, s: Services): void {
     promptSnippet: "bg_write: send input to a background task started with stdin true",
     parameters: SCHEMAS.bg_write,
     execute: (_id, params, _signal, _onUpdate, ctx) => write(s, params, ctx),
+  });
+  pi.registerTool({
+    name: "bg_monitor",
+    label: "bg_monitor",
+    description: "Turn new output lines of a running background task into notifications, so you can wait for specific output instead of polling bg_output. Optional grep (JavaScript regex) keeps only matching lines; lines are batched per second (at most 20 per message), and the monitor stops after max_notifications messages (default 10, maximum 100) or when the task ends. Lines printed before the call are not included. A new call on the same task replaces its monitor; stop true ends it. Monitor messages do not end bg_wait.",
+    promptSnippet: "bg_monitor: be notified of new output lines of a running task (optionally matching a grep)",
+    parameters: SCHEMAS.bg_monitor,
+    execute: (_id, params, _signal, _onUpdate, ctx) => monitor(s, params, ctx),
   });
 }

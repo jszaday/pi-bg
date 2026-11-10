@@ -2,9 +2,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import type { NotificationItem } from "../contract.js";
-import { notificationText, REDELIVERY_LABEL } from "../core/format.js";
+import { monitorText, notificationText, REDELIVERY_LABEL } from "../core/format.js";
 import { isErrorOutcome } from "../core/notify-policy.js";
-import { NOTIFICATION_TYPE, type NotificationDetails } from "./runtime.js";
+import { MONITOR_TYPE, NOTIFICATION_TYPE, type MonitorDetails, type NotificationDetails } from "./runtime.js";
 
 function isDetails(d: unknown): d is NotificationDetails {
   const b = (d as NotificationDetails | undefined)?.batch;
@@ -27,5 +27,20 @@ export function registerNotificationRenderer(pi: ExtensionAPI): void {
     const lines = batch.items.map((item) => theme.fg(isErrorOutcome(item.task) ? "error" : "success", oneLine(item)));
     if (batch.redelivery) lines.unshift(theme.fg("muted", REDELIVERY_LABEL));
     return new Text(lines.join("\n"), 1, 0);
+  });
+}
+
+/** Collapsed: the first line of the message and the last new line; expanded: the full text. */
+export function registerMonitorRenderer(pi: ExtensionAPI): void {
+  pi.registerMessageRenderer<MonitorDetails>(MONITOR_TYPE, (message, options, theme) => {
+    const batch = message.details?.batch;
+    if (!batch || !Array.isArray(batch.lines) || batch.lines.length === 0) {
+      const content = typeof message.content === "string" ? message.content : message.content.map((c) => (c.type === "text" ? c.text : "")).join("");
+      return new Text(content, 1, 0);
+    }
+    const full = monitorText(batch);
+    if (options.expanded) return new Text(full, 1, 0);
+    const head = full.split("\n")[0].replace(/:$/, "");
+    return new Text(theme.fg("muted", `${head}, last: ${batch.lines[batch.lines.length - 1]}`), 1, 0);
   });
 }

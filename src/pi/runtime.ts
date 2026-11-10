@@ -7,6 +7,7 @@ import type {
   ProcessHandle,
   ProcessRunner,
   SessionOverrides,
+  MonitorBatch,
   NotificationBatch,
   TailBuffer,
   TaskId,
@@ -15,6 +16,7 @@ import type {
 } from "../contract.js";
 import { createTailBuffer } from "../core/tail.js";
 import { isTerminal } from "../core/task.js";
+import type { MonitorPolicy } from "../core/monitor-policy.js";
 import type { NotificationPolicy } from "../core/notify-policy.js";
 import type { TaskRegistry } from "../core/registry.js";
 import type { WaitCoordinator } from "../core/wait.js";
@@ -64,6 +66,7 @@ export interface Services extends ServicesExtras {
   ctx: { current?: ExtensionContext };
   waits: WaitCoordinator;
   notify: NotificationPolicy;
+  monitors: MonitorPolicy;
   ui: UiSink;
   sessionId: () => string;
 }
@@ -88,4 +91,10 @@ export const NOTIFICATION_TYPE = "pi-bg:task";
 export interface NotificationDetails {
   taskIds: TaskId[];
   batch: NotificationBatch;
+}
+
+/** Custom message type of bg_monitor messages and the shape of its `details`, shared by the sink and the renderer. Informational: no ack, no redelivery. */
+export const MONITOR_TYPE = "pi-bg:monitor";
+export interface MonitorDetails {
+  batch: MonitorBatch;
 }

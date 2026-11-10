@@ -196,6 +196,7 @@ export function installLifecycle(pi: ExtensionAPI, s: Services, deps: LifecycleD
     const running = s.registry.running();
     const keep = event?.reason === "reload" && deps.retain !== undefined && s.config().lifecycle.keepOnReload && running.length > 0 && running.every((t) => t.state === "background");
     if (!keep) for (const rt of s.runtime.values()) for (const t of rt.timers) s.clock.clearTimeout(t); // kept tasks keep their hard-timeout timers
+    s.monitors.disposeAll(); // monitors do not survive a reload; no monitor message for output or kills during teardown
     s.notify.discard(); // a message now would wake a dying session; tasks killed below are suppressed anyway
     s.waits.dispose(); // an active bg_wait would otherwise keep its timer after shutdown (#13)
     if (keep) {

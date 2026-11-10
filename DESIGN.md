@@ -89,7 +89,7 @@ The pure core (`src/core`) holds all logic worth testing:
 
 Ports (declared in `src/contract.ts`, implemented outside the core): `Clock`, `ProcessRunner`, `LogStore`, `NotificationSink`, `UiSink`. The runner port hides how a process is spawned (section 4).
 
-Pi glue (`src/pi`) is thin and holds no policy: tool registration (`bash`, `bg_status`, `bg_output`, `bg_wait`, `bg_kill`, `bg_write`), the move-key listener, the `input` and lifecycle event handlers, the footer status and `/bg` command, the notification message renderer, config file loading, and the composition root that wires ports to adapters. Adapters (`src/adapters`) implement ports against Node (`child_process`, `fs`) or Pi's `BashOperations`. Tool results use snake_case on the wire (as in section 5) and camelCase internally; one mapping module in the glue owns the conversion.
+Pi glue (`src/pi`) is thin and holds no policy: tool registration (`bash`, `bg_status`, `bg_output`, `bg_wait`, `bg_kill`, `bg_write`, `bg_monitor`), the move-key listener, the `input` and lifecycle event handlers, the footer status and `/bg` command, the notification message renderer, config file loading, and the composition root that wires ports to adapters. Adapters (`src/adapters`) implement ports against Node (`child_process`, `fs`) or Pi's `BashOperations`. Tool results use snake_case on the wire (as in section 5) and camelCase internally; one mapping module in the glue owns the conversion.
 
 This follows the repo conduct (testable logic in pure modules, higher-level facilities built from lower-level primitives, one canonical behavior model with platform realizations behind ports). The seam placement mirrors pi-bg-bash's split modules; no surveyed extension ports the process behind an interface, which is what makes the fake runner possible.
 
@@ -116,7 +116,7 @@ Recommendation: own-spawn as the default, with the Pi-ops adapter as fallback, s
 
 ## 5. Tool surface
 
-Six tools. `bash` is the replaced built-in with five new parameters; five new tools carry the `bg_` prefix. Schemas are TypeBox (provided by Pi). One tool per verb with small schemas is preferred over one multiplexed tool (patty's `jobs`) because each schema is shorter to read and models misuse union parameters less; the cost is six tool entries in the prompt. Alternative rejected: a separate `bg_start` (pringled `bg_run`); `bash` with `run_in_background` already is the start verb and matches Claude Code, and a duplicate start path would need its own clash and guideline handling. Reopen if S7 shows `bash` is routinely owned by another extension (then a standalone start tool is the only way to offer R2). Ownership is detected at `session_start` with `pi.getAllTools()` and the tool's source info, as pringled does (S7).
+Seven tools. `bash` is the replaced built-in with five new parameters; six new tools carry the `bg_` prefix. Schemas are TypeBox (provided by Pi). One tool per verb with small schemas is preferred over one multiplexed tool (patty's `jobs`) because each schema is shorter to read and models misuse union parameters less; the cost is seven tool entries in the prompt. Alternative rejected: a separate `bg_start` (pringled `bg_run`); `bash` with `run_in_background` already is the start verb and matches Claude Code, and a duplicate start path would need its own clash and guideline handling. Reopen if S7 shows `bash` is routinely owned by another extension (then a standalone start tool is the only way to offer R2). Ownership is detected at `session_start` with `pi.getAllTools()` and the tool's source info, as pringled does (S7).
 
 Ids are `bg<N>` per session, monotonic, never reused; on `session_start` the counter is reseeded above any id seen in earlier tool results on the branch (pringled's scheme) so a resumed transcript's `bg3` cannot collide.
 
@@ -170,7 +170,19 @@ Result: `{id, written_bytes, eof}`. Errors, each naming cause and action (sectio
 
 ### 5.7 Prompt guidance
 
-The `bash` tool's `promptGuidelines` tell the model to background anything that may run long or near its timeout (so the output stays in a log, not the context), to never sleep or poll (a task-end notification wakes it, or it calls `bg_wait`), and to manage tasks by id with `bg_status`, `bg_output`, `bg_kill` and `bg_wait`. The guidance is a string constant in `format` so it can be tuned in one place.
+The `bash` tool's `promptGuidelines` tell the model to background anything that may run long or near its timeout (so the output stays in a log, not the context), to never sleep or poll (a task-end notification wakes it, or it calls `bg_wait`), to manage tasks by id with `bg_status`, `bg_output`, `bg_kill` and `bg_wait`, and to use `bg_monitor` to wait for specific output instead of polling `bg_output`. The guidance is a string constant in `format` so it can be tuned in one place.
+
+### 5.8 `bg_monitor`
+
+Parameters: `id: string`, `grep?: string` (a JavaScript regex tested against each normalized line; absent reports every new line), `max_notifications?: integer` (default 10, minimum 1, maximum 100), `stop?: boolean`. Turns new output lines of a running task into notifications to the model, so it is woken by matching output instead of polling `bg_output`. The prior art is `tail -f -n0 | grep` and Claude Code's Monitor tool (each output line is an event; events are batched; the monitor stops itself).
+
+Semantics. There is one monitor per task; a call on a task that already has one replaces it (new filter, new count, pending lines dropped) and the result says so. `stop: true` ends the monitor; with none active it is a normal result saying so. Only complete lines produced after the call are reported: lines printed before it are not seen, and neither is the rest of a line the task had begun printing (read the past with `bg_output`). Lines go through the same normalization as the tail (ANSI and control characters stripped, carriage-return overwrites collapsed) and are cut at 500 characters. Lines collected for a fixed window of 1 s from the first pending line go out as one message of at most 20 lines; further lines of the window are counted ("N more matching lines; read them with bg_output"). Window, line cap and line length are constants in `src/core/monitor-policy.ts`, not configuration. The `max_notifications`-th message stops the monitor and says so, with the action (call `bg_monitor` again to continue). When the task ends, pending lines (including an unterminated last line) are sent at once, before the task-end notification, and the monitor stops; with nothing pending nothing is sent. Stop, replace and session shutdown send nothing.
+
+Result: `{id, monitoring, grep?, max_notifications?, replaced?}`. Errors: unknown id, id from an earlier run, an invalid `grep` and an inactive pi-bg use the existing texts (section 13); a task that has already ended is a new class naming the action (read its output with `bg_output`).
+
+Delivery. Messages use the notification path with the custom type `pi-bg:monitor`, the `notify.delivery` and `notify.wake` settings and the same send-failure handling (section 9), and a compact renderer. They are informational: there is no ack and no redelivery after an aborted turn, because the log keeps the output. A monitor message does not end a running `bg_wait`; it is queued and arrives after the wait returns.
+
+Limits. Monitors live in memory and are not carried across a reload (also with a future `keepOnReload`); output in the gap is only in the log. The policy is `MonitorPolicy` (pure core, injected clock, `MonitorSink` port); the glue feeds it output chunks from the task starter and terminal task events from the registry, before the notification policy sees them.
 
 ## 6. Configuration
 
@@ -299,7 +311,7 @@ Scope: this is the closest requirement to richardgill (30 s, per-call, backgroun
 
 ## 12. Lifecycle and cleanup
 
-Start: the extension factory registers all six tools (a registration cannot be added conditionally later). `session_start` reseeds ids, runs log GC, checks bash ownership (below), installs the move-key listener and creates the UI. Per call: create task, start runner, wire timers and sinks.
+Start: the extension factory registers all seven tools (a registration cannot be added conditionally later). `session_start` reseeds ids, runs log GC, checks bash ownership (below), installs the move-key listener and creates the UI. Per call: create task, start runner, wire timers and sinks.
 
 Exit paths: `session_shutdown` fires for every reason (quit, reload, new, resume, fork); pi-bg kills all running tasks on all of them (locked decision), except that with `lifecycle.keepOnReload` a `reload` keeps background tasks running (below). The handler is idempotent, cancels timers, ends an active `bg_wait` as `aborted`, signals the process groups, waits up to 5 s (bounded) for exits, closes log files, unsubscribes the input listener and clears the status. A `process.on("exit")` backstop synchronously SIGKILLs any still-registered groups, for exit paths that skip the event.
 
@@ -324,6 +336,7 @@ Every failure message names the cause and the action, reaches the model (tool er
 | Unknown id | `No task bg9 in this session. Known: bg1, bg2. Use bg_status with no id to list.` |
 | Id from an earlier run | `bg3 was started before this session was resumed or reloaded and was stopped when Pi exited. Start the command again.` |
 | Write to a task without stdin, a finished task, too much data, or a closed stdin | Error result per class: `bg_write` names the cause (not started with stdin, already ended, over the 65536-byte limit, stdin closed) and the action (start again with `stdin` true, read the output with `bg_output`, split the data). |
+| Monitor a finished task | Error result: `bg3 has already ended (exited); nothing to monitor. Action: read its output with bg_output.` An invalid `grep` reuses the `bad_grep` text and names `bg_monitor` as the tool to call again. `stop` with no active monitor is not an error. |
 | Kill on a finished task | Not an error: listed in `already_finished` with its final state. |
 | Wait with nothing to wait on | `reason: no_tasks`; text says no background task is running. |
 | Wait timed out | `reason: timeout`; lists states; says to call bg_wait again or bg_status. |
@@ -369,7 +382,7 @@ Design choices here follow pringled and pi-bg-bash (footer count); they are rout
 | Task view | `/tasks` | `/bg`, footer |
 | Size cap | kills above 5 GB | stops logging at the cap, keeps task |
 | Lifetime | killed at exit; detached children killed on Linux/macOS | killed at every session shutdown; group kill; optional reaper |
-| Monitor (stream lines to model) | `Monitor` tool | not in v1 (deferred) |
+| Monitor (stream lines to model) | `Monitor` tool | `bg_monitor` (batched lines of a running task, optional grep) |
 
 Failure modes of Claude Code and the guard (evidence: the issue numbers in the research notes; not independently re-verified):
 
@@ -410,8 +423,9 @@ Principle: policy lives in pure modules, tested with a fake clock and fake ports
 | No log kill at cap | a runaway producer harms the host |
 | Hard `timeout` on pi-bg's clock | Pi exposes a per-call timer API, or the double clock causes a divergence bug |
 | Kill on every session shutdown | persistence work is tracked in issue #2 |
+| `bg_monitor` is a separate tool, not a `bash` parameter | users want monitoring from the start of a command: add a `monitor` parameter to `bash` (a parameter cannot attach to a task that is already running) |
 | Reaper only with own-spawn | Pi exposes pid or process-group control |
 | POSIX only | a Windows user base appears |
 | Footer Down is captured only when the `TUI` handle shows no overlay and the focused component is the editor (duck-typed on `isShowingAutocomplete`) with no autocomplete menu; empty editor text stands in for exhausted prompt history | Pi exposes a dialog, overlay or focus flag, or the duck-typed editor check fails on a Pi upgrade |
 
-Deferred (tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues)): persistence across resume and reload (#2); generic tool backgrounding (#5); a Monitor-style line-streaming tool (#7); Windows (#8); a standalone `bg_start` fallback (#9).
+Deferred (tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues)): persistence across resume and reload (#2); generic tool backgrounding (#5); Windows (#8); a standalone `bg_start` fallback (#9).

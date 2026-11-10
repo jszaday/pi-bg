@@ -43,6 +43,7 @@ describe("composition root parity", () => {
     expect([...pi.flags.keys()].sort()).toEqual(["bg-notify", "bg-timeout", "no-bg"]);
     expect(pi.commands.has("bg")).toBe(true);
     expect(pi.renderers.has("pi-bg:task")).toBe(true);
+    expect(pi.renderers.has("pi-bg:monitor")).toBe(true);
     for (const ev of ["session_start", "session_shutdown", "input", "message_end", "agent_settled"]) {
       expect(pi.handlers.get(ev)?.length, ev).toBeGreaterThan(0);
     }

@@ -1,6 +1,6 @@
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { HandoffReason, NotifyLevel, StreamName, Task, TaskState, TaskSummary, WaitReason, WaitResult } from "../contract.js";
-import { type KillResult, type StatusPage, type OutputResult, handoffText, killText, outputText, summaryText, waitText, writeText } from "../core/format.js";
+import { type KillResult, type StatusPage, type OutputResult, handoffText, killText, monitorStartText, monitorStopText, outputText, summaryText, waitText, writeText } from "../core/format.js";
 import type { ToolName } from "../tools/schemas.js";
 
 // camelCase internal -> snake_case wire (DESIGN section 5); text comes from src/core/format.ts only.
@@ -59,6 +59,15 @@ export interface WireWrite {
   id: string;
   written_bytes: number;
   eof: boolean;
+}
+export interface WireMonitor {
+  id: string;
+  monitoring: boolean;
+  grep?: string;
+  /** Present when a monitor was started. */
+  max_notifications?: number;
+  /** Present (true) when the call replaced an active monitor. */
+  replaced?: boolean;
 }
 export interface WireHandoff {
   task_id: string;
@@ -178,6 +187,15 @@ export function toWriteResult(r: { id: string; bytes: number; eof: boolean }): A
   return make(writeText(r), wire);
 }
 
+/** Started monitor (`monitoring` true) or a stop; `wasActive` says whether the stop found a monitor. */
+export function toMonitorResult(r: { id: string; monitoring: true; grep?: string; maxNotifications: number; replaced: boolean } | { id: string; monitoring: false; wasActive: boolean }): AgentToolResult<Record<string, unknown>> {
+  if (!r.monitoring) return make(monitorStopText({ id: r.id, wasActive: r.wasActive }), { id: r.id, monitoring: false } satisfies WireMonitor);
+  const wire: WireMonitor = { id: r.id, monitoring: true, max_notifications: r.maxNotifications };
+  if (r.grep !== undefined) wire.grep = r.grep;
+  if (r.replaced) wire.replaced = true;
+  return make(monitorStartText(r), wire);
+}
+
 /** One entry per tool name; the W8 parity test compares its keys with SCHEMAS and the registered tools. */
 export const RESULT_MAPPERS: Record<ToolName, (...a: never[]) => unknown> = {
   bash: toBashHandoffResult,
@@ -186,4 +204,5 @@ export const RESULT_MAPPERS: Record<ToolName, (...a: never[]) => unknown> = {
   bg_wait: toWaitResult,
   bg_kill: toKillResult,
   bg_write: toWriteResult,
+  bg_monitor: toMonitorResult,
 };
