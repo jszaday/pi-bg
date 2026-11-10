@@ -24,7 +24,7 @@ Requirements: Pi (`pi-coding-agent`) 1.5.1, the version it is tested against; No
 From npm:
 
 ```
-pi install npm:pi-bg
+pi install npm:@jszaday/pi-bg
 ```
 
 From git, pinned to a release tag:

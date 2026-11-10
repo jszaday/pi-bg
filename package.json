@@ -1,5 +1,5 @@
 {
-  "name": "pi-bg",
+  "name": "@jszaday/pi-bg",
   "version": "0.2.0",
   "license": "MIT",
   "type": "module",
@@ -20,6 +20,9 @@
     "extensions": ["./src/index.ts"]
   },
   "main": "./src/index.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": ["src", "README.md", "CHANGELOG.md", "LICENSE"],
   "scripts": {
     "check": "npm run typecheck && npm test",
