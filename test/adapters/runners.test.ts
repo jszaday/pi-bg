@@ -13,7 +13,7 @@ const env = () => piShellEnv();
 const own = (termGraceMs = 300, extra: object = {}) => createOwnSpawnRunner({ ...shell, env, termGraceMs, ...extra });
 const piOps = () => createPiOpsRunner(createLocalBashOperations());
 
-// Conformance list from TODO S3: both runners must agree on these.
+// Conformance list from the design's runner conformance run (DESIGN.md section 4): both runners must agree on these.
 const both: [string, () => ProcessRunner][] = [["own-spawn", () => own()], ["pi-ops", piOps]];
 
 describe.each(both)("conformance: %s", (_n, make) => {

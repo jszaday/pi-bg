@@ -176,7 +176,7 @@ export function installLifecycle(pi: ExtensionAPI, s: Services, deps: LifecycleD
   pi.on("session_shutdown", async () => {
     for (const rt of s.runtime.values()) for (const t of rt.timers) s.clock.clearTimeout(t);
     s.notify.discard(); // a message now would wake a dying session; tasks killed below are suppressed anyway
-    // TODO(wait-dispose) P3: WaitCoordinator has no dispose, so an active bg_wait keeps its timer (up to maxTimeoutSeconds) after shutdown.
+    // TODO(#13) P3 (wait dispose): WaitCoordinator has no dispose, so an active bg_wait keeps its timer (up to maxTimeoutSeconds) after shutdown.
     await killAll(s, killGroup);
     for (const rt of s.runtime.values()) {
       try {

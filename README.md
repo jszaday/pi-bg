@@ -6,7 +6,7 @@ Background tasks for the [Pi coding agent](https://github.com/earendil-works/pi)
 
 ## Status
 
-Pre-release (version 0.0.0): installable from git, not yet published to npm. All six features below are implemented and covered by unit tests and live (gated) tests against a real Pi session. See [TODO.md](https://github.com/jszaday/pi-bg/blob/main/TODO.md) for open items.
+Version 0.1.0, the first release. Tested against Pi 1.4.0; POSIX only (Linux and macOS). All six features below are implemented and covered by unit tests and live (gated) tests against a real Pi session. Open items are tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues).
 
 Requirements: Pi (`pi-coding-agent`) 1.4.0, the version it is tested against; Node.js 22.19 or newer; a POSIX system (Linux or macOS).
 
@@ -86,7 +86,7 @@ An invalid key is not fatal. pi-bg reports the key, the problem and the default 
 - Output logs are written under the system temporary directory. Logs of finished tasks outlive the session and are removed after a retention period. A task whose log reaches the per-task cap stops writing to the log; it is not killed, and its in-memory tail keeps updating.
 - Windows is not supported.
 
-For the reasoning behind these limits, the open items and the planned work, see [DESIGN.md](https://github.com/jszaday/pi-bg/blob/main/DESIGN.md) sections 12 and 17 and [TODO.md](https://github.com/jszaday/pi-bg/blob/main/TODO.md).
+For the reasoning behind these limits, the open items and the planned work, see [DESIGN.md](https://github.com/jszaday/pi-bg/blob/main/DESIGN.md) sections 12 and 17 and the [open issues](https://github.com/jszaday/pi-bg/issues).
 
 ## Security and privacy
 

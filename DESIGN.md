@@ -1,10 +1,10 @@
 # pi-bg: design
 
-pi-bg is a Pi (pi-coding-agent 1.4.0) extension that lets bash commands run in the background: start them there, move them there with a key, auto-move them after a timeout, wait on them without blocking the user, and be told when they finish. This document is the design of record. Work decomposition, internal TypeScript contracts, spikes and open decisions live in `TODO.md`; this file does not restate them.
+pi-bg is a Pi (pi-coding-agent 1.4.0) extension that lets bash commands run in the background: start them there, move them there with a key, auto-move them after a timeout, wait on them without blocking the user, and be told when they finish. This document is the design of record. Open work is tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues); this file does not restate it.
 
 ## 1. Scope, requirements, terms
 
-Labels. `S1` to `S8` are spikes (small prototypes with a pass criterion, run and then removed from the tree; their findings are folded in here and they remain in git history), `Q1` to `Q8` are open coordinator decisions, `W0` to `W11` are workstreams; all are defined in `TODO.md`. "Surveyed extensions" are the existing Pi background-task packages studied before this design (pringled `pi-background`, patty `pi-patty-bg-tasks`, `pi-bg-bash`, `pi-async-bash`, richardgill `background-bash`, `pi-famulus`, `pi-wake-jobs`, `pi-unified-exec`, and others). Claude Code issue numbers (`#7479` and so on) are in the `anthropics/claude-code` GitHub repository; they and the Claude Code behavior described are taken from public docs and issue threads, not re-verified. The survey and Claude Code notes behind this design are condensed in `docs/prior_art.md`; the Pi source reading was done by research passes whose findings appear in the evidence table of section 2 with the source symbol for each claim.
+Labels. `S1` to `S8` are spikes (small prototypes with a pass criterion, run and then removed from the tree; their findings are folded in here and they remain in git history), `Q1` to `Q8` are open coordinator decisions, `W0` to `W11` are workstreams; the planning notes that defined them were removed from the tree and remain in git history. "Surveyed extensions" are the existing Pi background-task packages studied before this design (pringled `pi-background`, patty `pi-patty-bg-tasks`, `pi-bg-bash`, `pi-async-bash`, richardgill `background-bash`, `pi-famulus`, `pi-wake-jobs`, `pi-unified-exec`, and others). Claude Code issue numbers (`#7479` and so on) are in the `anthropics/claude-code` GitHub repository; they and the Claude Code behavior described are taken from public docs and issue threads, not re-verified. The survey and Claude Code notes behind this design are condensed in `docs/prior_art.md`; the Pi source reading was done by research passes whose findings appear in the evidence table of section 2 with the source symbol for each claim.
 
 Requirements (from the user):
 
@@ -17,7 +17,7 @@ Requirements (from the user):
 
 Locked decisions: new build (borrow ideas, no forks); TypeScript with no runtime dependency beyond what Pi provides; tasks are killed when the session exits (persistence is deferred); the built-in `bash` is replaced through a same-name `registerTool`; testable logic lives in pure modules separate from Pi glue; the key is rebindable and captured only while a movable tool is running; guard against Claude Code's known failure modes (section 15).
 
-Interpretation made here: "tool" means the `bash` tool in v1. Pi has no way to detach an arbitrary in-flight tool call, and only process-backed work can outlive its tool call safely. Generalizing is deferred (TODO.md, question Q1). Platform: POSIX (Linux, macOS) only in v1; on Windows the extension stays inactive and says why.
+Interpretation made here: "tool" means the `bash` tool in v1. Pi has no way to detach an arbitrary in-flight tool call, and only process-backed work can outlive its tool call safely. Generalizing is deferred (issue #5). Platform: POSIX (Linux, macOS) only in v1; on Windows the extension stays inactive and says why.
 
 Terms.
 - **Task**: one command run by pi-bg, with an id (`bg1`, `bg2`, ...), a lifecycle state and an output log.
@@ -30,7 +30,7 @@ Terms.
 
 ## 2. Evidence status
 
-Every claim below that rests on Pi behavior carries one of four marks. Executed means observed against Pi 1.4.0 in a prototype run (the spikes S1 to S8, removed from the tree after their findings were folded in here; they remain in git history, and the gated live tests under `test/gated` re-check the main ones). Verified means read in Pi 1.4.0 source (by a research pass for this design), not executed. Reported means taken from a clone's code, a README or Node documentation, not from Pi source. Unverified means inferred or not read. Each unverified or reported item the design depends on had a spike with a pass criterion in `TODO.md`, and the fallbacks are listed after the table. No surveyed extension was executed either.
+Every claim below that rests on Pi behavior carries one of four marks. Executed means observed against Pi 1.4.0 in a prototype run (the spikes S1 to S8, removed from the tree after their findings were folded in here; they remain in git history, and the gated live tests under `test/gated` re-check the main ones). Verified means read in Pi 1.4.0 source (by a research pass for this design), not executed. Reported means taken from a clone's code, a README or Node documentation, not from Pi source. Unverified means inferred or not read. Each unverified or reported item the design depends on had a spike with a pass criterion in the former planning notes (git history), and the fallbacks are listed after the table. No surveyed extension was executed either.
 
 | Item | Status | Basis | Regression test |
 |---|---|---|---|
@@ -107,7 +107,7 @@ Risk and fallback: the native tool rethrows the sentinel unchanged (section 2), 
 - Pi-ops adapter: wraps `createLocalBashOperations`. Reuses Pi's shell resolution, environment, detached spawn, process-tree kill and its tracked-pid cleanup on Pi's exit signals. Limits: no pid, merged streams, kill is SIGKILL of the tree with no grace period.
 - Own-spawn adapter: `child_process.spawn` detached into its own process group, stdout and stderr piped separately, SIGTERM with a grace period then SIGKILL to the group. Gives the pid, split streams (R5 wording "stdout/stderr"), graceful stop, and the pid needed by the orphan reaper (section 12). Cost: it duplicates Pi's shell setup (shell path, command prefix, environment).
 
-Recommendation: own-spawn as the default, with the Pi-ops adapter as fallback, selected after a conformance run of both runners against the built-in (quoting, env, prefix, cwd, exit and signal codes, 10 MB output, closed stdin, group kill, timeout and abort text, `TMPDIR`; the native runner lacks only pid and split streams) and by the coordinator decision Q2 in `TODO.md`. The rest of the design is written against the capabilities, not the adapter: `bg_output` accepts a `stream` parameter and answers `combined` always, `stdout`/`stderr` only when the runner can split.
+Recommendation: own-spawn as the default, with the Pi-ops adapter as fallback, selected after a conformance run of both runners against the built-in (quoting, env, prefix, cwd, exit and signal codes, 10 MB output, closed stdin, group kill, timeout and abort text, `TMPDIR`; the native runner lacks only pid and split streams) and by the coordinator decision Q2 (former planning notes, git history). The rest of the design is written against the capabilities, not the adapter: `bg_output` accepts a `stream` parameter and answers `combined` always, `stdout`/`stderr` only when the runner can split.
 
 ## 5. Tool surface
 
@@ -294,7 +294,7 @@ Orphans (Claude Code #102511, #102009, #106483): with the Pi-ops adapter, Pi's t
 
 A process group alone does not cover daemons that `setsid` away; documented as a known limit shared by all surveyed extensions.
 
-Resumed or reloaded sessions: ids in the transcript refer to dead tasks; `bg_status` on such an id answers with the cause and action (section 13). Persistence across resume is deferred (TODO.md).
+Resumed or reloaded sessions: ids in the transcript refer to dead tasks; `bg_status` on such an id answers with the cause and action (section 13). Persistence across resume is deferred (issue #2).
 
 ## 13. Failure messages
 
@@ -363,7 +363,7 @@ Principle: policy lives in pure modules, tested with a fake clock and fake ports
 - Adapter tests with real processes in a per-test `mkdtemp` under `os.tmpdir()`: group kill reaches a grandchild, SIGTERM then SIGKILL timing, large output, CR progress, `TMPDIR` honored, spawn errors (bad cwd), log write failure by an unwritable directory. Parity test between the two runner adapters on a shared conformance list (S3).
 - Glue tests against `FakePi` (records registered tools, handlers and shortcuts; scripts `input`, `session_*` events and terminal keys; captures `sendMessage` calls and UI calls): handoff via the sentinel path, ctrl+b consumed only while movable and passed through otherwise, `input` ends a wait with the race-free confirmation scripted both ways, notification options per mode, shutdown kills all.
 - Contract-drift tests: each tool result type is checked with `satisfies` against its schema's static type; a round trip from producer (`format`/glue) through the schema validator; exhaustiveness over the task state and notification status unions; a composition-root parity test (owned by W8) that the registered tool names equal the keys of the schema table and of the result-mapper table; a negative control with a stub that returns a wrong shape and must fail the parity test.
-- Live (gated by env var, run one at a time): the S1 to S6 spikes became regression tests where feasible (scripted tmux pty for ctrl+b; SDK session for wait and notification), owned by workstream W10 in `TODO.md`. Timer-dependent tests use the fake clock, so repeating a flaky test 20 times is a check, not a hope.
+- Live (gated by env var, run one at a time): the S1 to S6 spikes became regression tests where feasible (scripted tmux pty for ctrl+b; SDK session for wait and notification), owned by workstream W10 (former planning notes, git history). Timer-dependent tests use the fake clock, so repeating a flaky test 20 times is a check, not a hope.
 - Environment limits are findings: a missing tmux or Pi SDK skips the gated test with the reason; it is never faked.
 
 ## 17. Decision log with reopen triggers
@@ -380,8 +380,8 @@ Principle: policy lives in pure modules, tested with a fake clock and fake ports
 | Once-only status and one redelivery | S5 shows a cheaper reliable ack |
 | No log kill at cap | a runaway producer harms the host |
 | Hard `timeout` on pi-bg's clock | Pi exposes a per-call timer API, or the double clock causes a divergence bug |
-| Kill on every session shutdown | persistence work is scheduled (TODO.md deferred) |
+| Kill on every session shutdown | persistence work is tracked in issue #2 |
 | Reaper only with own-spawn | Pi exposes pid or process-group control |
 | POSIX only | a Windows user base appears |
 
-Deferred (tracked in `TODO.md`): persistence across resume and reload; generic tool backgrounding; stdin writes to a task; a Monitor-style line-streaming tool; Windows; a standalone `bg_start` fallback; signal choice on `bg_kill`; richer task panel.
+Deferred (tracked in [GitHub issues](https://github.com/jszaday/pi-bg/issues)): persistence across resume and reload (#2); generic tool backgrounding (#5); stdin writes to a task (#6); a Monitor-style line-streaming tool (#7); Windows (#8); a standalone `bg_start` fallback (#9); signal choice on `bg_kill` (#10); richer task panel (#15).
