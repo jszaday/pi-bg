@@ -26,7 +26,8 @@ function footerKey(data: string): FooterKey {
 /** True only when the editor itself has focus with no autocomplete menu; unknown focus means false (fail closed). */
 function editorHasFocus(tui: TuiHandle | undefined): boolean {
   if (!tui || tui.hasOverlay()) return false;
-  // TODO(#15): duck-typed editor focus check relies on Pi internals (isShowingAutocomplete); replace when Pi exposes a dialog/overlay flag
+  // Depends on a Pi internal: the focused editor's `isShowingAutocomplete()` (Pi 1.5.1 exposes no public flag). If Pi renames or removes it,
+  // this returns false and Down is simply never captured. Reopen when Pi exposes a dialog/overlay/focus flag (DESIGN "shells panel").
   const c = tui.getFocusedComponent() as { isShowingAutocomplete?: unknown } | null | undefined;
   if (!c || typeof c.isShowingAutocomplete !== "function") return false;
   return (c as { isShowingAutocomplete(): boolean }).isShowingAutocomplete() === false;
