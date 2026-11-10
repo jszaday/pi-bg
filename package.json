@@ -1,6 +1,6 @@
 {
   "name": "pi-bg",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "license": "MIT",
   "type": "module",
   "description": "Background tasks for the Pi coding agent: move long-running bash commands to the background, then check, wait for, and kill them.",
