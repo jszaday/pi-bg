@@ -31,6 +31,8 @@ export interface ShellsPanelDeps {
   clock: Clock;
   kill: (id: TaskId) => Promise<KillResult>;
   tailOf: (id: TaskId, n: number) => string[];
+  /** Complete output lines the task ever produced (monotonic); lets a paused view count lines that scrolled out of the tail window. */
+  totalLinesOf: (id: TaskId) => number;
   /** True once the task's in-memory output ring was released; `tailOf` has nothing for it then. */
   released?: (id: TaskId) => boolean;
   /** Async log read for a released task; the panel calls it at most once per task per open panel. */
@@ -123,7 +125,7 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
             let redrawTimer: TimerHandle | undefined;
             let tickTimer: TimerHandle | undefined;
 
-            let seen: { id: TaskId; lines: number } | undefined; // output length last accounted for
+            let seen: { id: TaskId; total: number } | undefined; // lines-ever count last accounted for
             const trackGrowth = (): void => {
               const row = view.mode === "detail" ? selected() : undefined;
               if (!row) {
@@ -131,9 +133,11 @@ export function createShellsPanel(deps: ShellsPanelDeps): ShellsPanel {
                 return;
               }
               const lines = outputOf().length;
-              // TODO(#15): paused detail view drifts once the 500-line tail window is full; needs a line counter from the runtime tail
-              if (seen && seen.id === row.id) view = onOutputGrowth(view, lines - seen.lines, lines, bodyHeight());
-              seen = { id: row.id, lines };
+              const total = deps.totalLinesOf(row.id);
+              // Growth comes from the lines-ever counter: once the tail window is full, the length stops growing while lines still shift.
+              // A released task no longer changes, so its counter is constant.
+              if (seen && seen.id === row.id) view = onOutputGrowth(view, total - seen.total, lines, bodyHeight());
+              seen = { id: row.id, total };
             };
             const sync = (): void => {
               const next = rowsNow();

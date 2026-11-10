@@ -88,6 +88,7 @@ export default function piBg(pi: ExtensionAPI): void {
   };
 
   const tailOf = (id: TaskId, n: number) => runtime.get(id)?.tail.lines(n) ?? [];
+  const totalLinesOf = (id: TaskId) => runtime.get(id)?.tail.totalLines() ?? 0;
   const notifyConfig = {
     get default() { return config.notify.default; },
     get delivery() { return config.notify.delivery; },
@@ -131,6 +132,7 @@ export default function piBg(pi: ExtensionAPI): void {
     clock,
     kill: (id) => killTasks(s, [id], "command"),
     tailOf,
+    totalLinesOf,
     released: (id) => runtime.get(id)?.evicted === true,
     releasedTail: async (id, n) => {
       const t = registry.get(id);
